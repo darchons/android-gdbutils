@@ -35,16 +35,12 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import re, sys
+import re
+from logging import debug, info, warning, error, critical, exception
 
 re_inst = re.compile(r'.+(0x[\da-f]+):\s+([\d\w_\.]+)\s+([^;]*);?')
 
 def tracebt ():
-    DEBUG = True #False
-
-    def doDebug (s, pc, sp):
-        if DEBUG:
-            print s + ' (pc = ' + hex(pc) + ', sp = ' + hex(sp) + ')'
 
     def doReport (pc, sp, is_thumb):
         gdb.execute('frame ' + hex(sp) + ' ' + hex(pc), False, False)
@@ -54,7 +50,7 @@ def tracebt ():
         branchList = []
 
         def doTraceBlock (pc, sp, is_thumb):
-            doDebug('start block', pc, sp)
+            debug('start block @ %x : %x', pc, sp)
             condBranchSkipped = 0
 
             # adjust pc according to ARM/THUMB mode
@@ -83,11 +79,11 @@ def tracebt ():
                 def doTraceBranch (pc, sp, is_thumb, mnemonic, args):
                     if args == 'lr':
                         # FIXME lr might not be valid
-                        doDebug(' bx lr', pc, sp)
+                        warning('bx lr @ %x : %x', pc, sp)
                         pc = int(gdb.parse_and_eval('(unsigned)$lr'))
                         doReport(pc, sp, (pc & 1) != 0)
                         return (pc, sp, (pc & 1) != 0)
-                    doDebug(' b(x) @addr', pc, sp) 
+                    info('b addr @ %x : %x', pc, sp)
                     pc = int(args, 0)
                     branchList.append((pc, condBranchSkipped))
                     return (pc, sp, is_thumb
@@ -118,7 +114,7 @@ def tracebt ():
                     (mnemonic.startswith('ldmi') and args.startswith('sp!')):
                     sp += 4 * len(args[args.find('{') :].split(','))
                     if args.find('pc') > 0:
-                        doDebug(' pop pc', pc, sp) 
+                        info('pop pc @ %x : %x', pc, sp)
                         args = args[args.find('pc') :]
                         pc = int(gdb.parse_and_eval('*(unsigned*)' +
                                 hex(sp - 4 * len(args.split(',')))))
@@ -135,7 +131,7 @@ def tracebt ():
                             'SUB with ' + args + ' (pc = ' + hex(pc) + ')'
                     sp -= int(args[args.find('#') + 1 :], 0)
 
-            doDebug('end block', pc, sp) 
+            debug('end blocki @ %x : %x', pc, sp)
             return (pc, sp, is_thumb)
 
         # don't let value of cpsr affect our results
