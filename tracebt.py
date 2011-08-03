@@ -35,10 +35,12 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import re
+import re, sys, logging
 from logging import debug, info, warning, error, critical, exception
 
 re_inst = re.compile(r'.+(0x[\da-f]+):\s+([\d\w_\.]+)\s+([^;]*);?')
+
+logging.getLogger().setLevel(logging.WARNING)
 
 class Frame:
 
@@ -47,16 +49,29 @@ class Frame:
         self.sp = sp
         self.is_thumb = is_thumb
 
-    def print(self)
+    def printToGDB(self):
         gdb.execute('frame ' + hex(self.sp) + ' ' + hex(self.pc), False, False)
+
+    def __str__(self):
+        # adjust pc according to ARM/THUMB mode
+        pc = self.pc & (~1) if self.is_thumb else self.pc & (~3)
+        return 'frame at {0:#08x} with function {1} ({2:#08x}) in {3}'.format(
+                self.sp, '??', pc, gdb.solib_name(pc))
 
     def _unwind(self):
         BLOCK_SIZE = 0x80
         pc = self.pc
         sp = self.sp
         is_thumb = self.is_thumb
-        branchList = []
-        condBranchCount = 0
+        class Branch:
+            def __init__(self, pc, is_cond):
+                self.pc = pc
+                self.is_cond = is_cond
+                self.take = not is_cond
+            def __cmp__(self, other):
+                return self.pc - other if type(other) is int \
+                    else self.pc - other.pc
+        branchHistory = []
 
         while True:
             debug('start block @ %x : %x', pc, sp)
@@ -84,30 +99,46 @@ class Frame:
                 args = match.group(3) + ' '
                 args = args[: args.find('<')].strip()
 
-                # trace certain instructions
-                def traceBranch():
-                    info('b addr @ %x : %x', pc, sp)
+                # trace branch instructions
+                def traceBranch(is_cond):
+                    info('branch (%s) to %s @ %x : %x', mnemonic, args, pc, sp)
                     new_pc = int(args, 0)
                     new_is_thumb = not is_thumb if mnemonic.startswith('bx') \
                                     else is_thumb
-                    branchList.append((new_pc, condBranchCount))
-                    return (new_pc, new_is_thumb)
+                    if pc not in branchHistory:
+                        branchHistory.append(Branch(pc, is_cond))
+                    elif branchHistory[-1] == pc: # nowhere else to go
+                        condid = next((i for i in 
+                                        reversed(range(len(branchHistory)))
+                                        if not branchHistory[i].take), None)
+                        assert condid >= 0, "infinite loop!"
+                        del branchHistory[condid + 1 :]
+                        branchHistory[condid].take = True
+                    return (branchHistory[branchHistory.index(pc)].take,
+                            new_pc, new_is_thumb)
 
+                # handle individual instructions
                 if mnemonic == 'b' or mnemonic == 'bx' or \
                     mnemonic == 'bal' or mnemonic == 'bxal':
                     if args == 'lr':
                         # FIXME lr might not be valid
-                        warning('bx lr @ %x : %x', pc, sp)
+                        warning('frame (bx lr) @ %x : %x', pc, sp)
                         pc = int(gdb.parse_and_eval('(unsigned)$lr'))
                         return Frame(pc, sp, (pc & 1) != 0)
-                    (pc, is_thumb) = traceBranch()
-                    condBranchCount = 0
-                    break
+                    (new_block, pc, is_thumb) = traceBranch(False)
+                    break # always take unconditional branches
 
-                elif mnemonic.startswith('b') and mnemonic.lstrip('bx') in \
-                    ['eq', 'ne', 'cs', 'cc', 'hs', 'lo', 'mi', 'pl',
-                     'vs', 'vc', 'hi', 'ls', 'ge', 'lt', 'gt', 'le']:
-                    condBranchCount += 1
+                elif mnemonic == 'cbnz' or mnemonic == 'cbz' or \
+                    mnemonic.startswith('b') and mnemonic[1:].lstrip('bx') in \
+                        ['eq', 'ne', 'cs', 'cc', 'hs', 'lo', 'mi', 'pl',
+                         'vs', 'vc', 'hi', 'ls', 'ge', 'lt', 'gt', 'le']:
+                    if mnemonic.startswith('cb'):
+                        args = args[args.find(',') + 1 :].lstrip()
+                    (new_block, new_pc, new_is_thumb) = traceBranch(True)
+                    if new_block:
+                        pc = new_pc
+                        is_thumb = new_is_thumb
+                        break
 
                 elif mnemonic == 'vpush':
                     sp -= 8 * len(args[args.find('{') :].split(','))
@@ -123,11 +154,10 @@ class Frame:
                     (mnemonic.startswith('ldmi') and args.startswith('sp!')):
                     sp += 4 * len(args[args.find('{') :].split(','))
                     if args.find('pc') > 0:
-                        info('pop pc @ %x : %x', pc, sp)
+                        info('frame (pop pc) @ %x : %x', pc, sp)
                         args = args[args.find('pc') :]
                         pc = int(gdb.parse_and_eval('*(unsigned*)' +
                                 hex(sp - 4 * len(args.split(',')))))
-                        doReport(pc, sp, (pc & 1) != 0)
                         return Frame(pc, sp, (pc & 1) != 0)
 
                 elif mnemonic == 'add' and args.startswith('sp'):
@@ -142,14 +172,12 @@ class Frame:
 
             debug('end block @ %x : %x', pc, sp)
 
-    def unwind(self)
+    def unwind(self):
         # don't let value of cpsr affect our results
         saved_cpsr = int(gdb.parse_and_eval('$cpsr'))
         gdb.execute('set $cpsr=' + hex(saved_cpsr & 0x03df))
         try:
             return self._unwind()
-        except:
-            exception('Frame.unwind')
         finally:
             gdb.execute('set $cpsr=' + hex(saved_cpsr))
 
@@ -158,9 +186,8 @@ sp = int(gdb.parse_and_eval('(unsigned)$sp'))
 is_thumb = (gdb.parse_and_eval('$cpsr') & 0x20) != 0
 
 f = Frame(pc, sp, is_thumb)
-f.print()
-
-for i in range(5)
+print '#0: ' + str(f)
+for i in range(1, 10):
     f = f.unwind()
-    f.print()
+    print '#{0}: {1}'.format(i, str(f))
 
