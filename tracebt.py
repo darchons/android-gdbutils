@@ -35,10 +35,8 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import re, sys, logging
+import re, sys, logging, os
 from logging import debug, info, warning, error, critical, exception
-
-re_inst = re.compile(r'.+(0x[\da-f]+):\s+([\d\w_\.]+)\s+([^;]*);?')
 
 logging.getLogger().setLevel(logging.WARNING)
 
@@ -55,8 +53,15 @@ class Frame:
     def __str__(self):
         # adjust pc according to ARM/THUMB mode
         pc = self.pc & (~1) if self.is_thumb else self.pc & (~3)
-        return 'frame at {0:#08x} with function {1} ({2:#08x}) in {3}'.format(
-                self.sp, '??', pc, gdb.solib_name(pc))
+        try:
+            block = gdb.block_for_pc(pc)
+        except RuntimeError:
+            block = None
+        func = block.function.print_name if block and block.function else '??'
+        lib = gdb.solib_name(pc)
+        lib = os.path.basename(lib) if lib else '??'
+        return 'frame {0:#08x} in function {1} ({2:#08x}) from {3}'.format(
+                self.sp, func, pc, lib)
 
     def _unwind(self):
 
@@ -65,34 +70,42 @@ class Frame:
                 self.pc = pc
                 self.is_cond = is_cond
                 self.take = not is_cond
+                self.tryTake = False
             def __cmp__(self, other):
                 return self.pc - other if type(other) is int \
                     else self.pc - other.pc
+            def __str__(self):
+                return hex(self.pc) + '[' + \
+                    ('c' if self.is_cond else '') + \
+                    ('t' if self.take else '') + \
+                    ('T' if self.tryTake else '') + ']'
 
         class AssemblyCache:
+            RE_INSTRUCTION = re.compile(
+                r'.+(0x[\da-f]+).*:\s+([\d\w_\.]+)\s+([^;]*);?')
             BLOCK_SIZE = 0x80
             MAX_RANGES = 10
             class Range(tuple):
                 def __new__(cls, start, end, is_thumb, insts):
                     return tuple.__new__(cls, (start, end, is_thumb, insts))
             def __init__(self, pc, is_thumb):
-                self.pc = pc
-                self.is_thumb = is_thumb
-                self._ranges = [self._loadRange(pc, is_thumb)]
-                self._curRange = self._ranges[0]
-                self._curIndex = 0
+                self._ranges = []
+                self.jump(pc, is_thumb)
             def __iter__(self):
                 return self
+            def __str__(self):
+                inst = self._curRange[3][self._curIndex]
+                return hex(inst[0]) + ': ' + inst[1] + ' ' + inst[2]
             def _findRange(self, addr, is_thumb):
                 return next((r for r in self._ranges if addr >= r[0]
                                 and addr < r[1] and is_thumb == r[2]), None)
             def _loadRange(self, pc, is_thumb):
                 # load instructions up until any cached range
-                end = pc + BLOCK_SIZE
+                end = pc + self.BLOCK_SIZE
                 cached = next((r for r in self._ranges if pc < r[0]
-                                and end > r[1] and is_thumb == r[2]), None)
+                                and end >= r[1] and is_thumb == r[2]), None)
                 if cached:
-                    end = cached[0]
+                    end = cached[0] + 8 # account for last instruction
                 # adjust pc according to ARM/THUMB mode
                 pc = pc | 1 if is_thumb else pc & (~3)
                 # disassemble a block of instructions at pc
@@ -101,11 +114,14 @@ class Frame:
                 insts = []
                 # discard last instruction to avoid misdisassembly
                 for strInst in strInsts[: -2]:
-                    match = re_inst.match(strInst)
+                    match = self.RE_INSTRUCTION.match(strInst)
                     if not match:
                         continue
                     # update pc
                     ipc = int(match.group(1).strip(), 0)
+                    # don't go past end because another range might cover it
+                    if ipc > end:
+                        break
                     # get mnemonic and strip width qualifier
                     mnemonic = match.group(2).strip()
                     mnemonic = mnemonic[:-2] \
@@ -115,28 +131,31 @@ class Frame:
                     args = match.group(3) + ' '
                     args = args[: args.find('<')].strip()
                     insts.append((ipc, mnemonic, args))
-                if not insts
+                if not insts:
                     return None
-                r = Range(insts[0][0], insts[-1][0], is_thumb, insts)
+                r = AssemblyCache.Range(insts[0][0], insts[-1][0],
+                                        is_thumb, insts)
                 self._ranges.append(r)
-                if len(self._ranges > MAX_RANGES):
+                if len(self._ranges) > self.MAX_RANGES:
                     del self._ranges[0]
                 return r
             def next(self):
                 is_thumb = self._curRange[2]
                 self._curIndex += 1
-                if self._curIndex < len(self._curRange):
-                    return self._curRange[self._curIndex] + (is_thumb,)
-                # jump to next range based on current pc
-                self.jump(self._curRange[1] + 4, is_thumb)
+                if self._curIndex < len(self._curRange[3]):
+                    return self._curRange[3][self._curIndex] + (is_thumb,)
+                # jump to end pc should automatically switch to next range
+                self.jump(self._curRange[1], is_thumb)
                 self._curIndex = 0
-                return self._curRange[0] + (is_thumb,)
+                return self._curRange[3][0] + (is_thumb,)
             def jump(self, pc, is_thumb):
-                self._curIndex = -1
-                self._curRange = _findRange(pc, is_thumb)
+                self._curRange = self._findRange(pc, is_thumb)
                 if not self._curRange:
-                    self._curRange = _loadRange(pc, is_thumb)
+                    self._curRange = self._loadRange(pc, is_thumb)
                 assert self._curRange, "cannot load instructions!"
+                self._curIndex = next((i for i in range(len(self._curRange[3]))
+                                    if self._curRange[3][i][0] > pc), -1) - 2
+                assert self._curIndex >= -1, "instruction not in range!"
 
         branchHistory = []
         assemblyCache = AssemblyCache(self.pc, self.is_thumb)
@@ -152,13 +171,19 @@ class Frame:
                                 else is_thumb
                 if pc not in branchHistory:
                     branchHistory.append(Branch(pc, is_cond))
+                elif branchHistory[-1].tryTake:
+                    branchHistory[-1].tryTake = False
                 elif branchHistory[-1] == pc: # nowhere else to go
+                    assert branchHistory[-1].take, \
+                        "branch should have been skipped!"
                     condid = next((i for i in
                                     reversed(range(len(branchHistory)))
-                                    if not branchHistory[i].take), None)
+                                    if not branchHistory[i].take), -1)
                     assert condid >= 0, "infinite loop!"
                     del branchHistory[condid + 1 :]
                     branchHistory[condid].take = True
+                    branchHistory[condid].tryTake = True
+                    return (True, new_pc, new_is_thumb)
                 return (branchHistory[branchHistory.index(pc)].take,
                         new_pc, new_is_thumb)
 
@@ -195,7 +220,8 @@ class Frame:
                 sp += 8 * len(args[args.find('{') :].split(','))
 
             elif mnemonic == 'pop' or \
-                (mnemonic.startswith('ldmi') and args.startswith('sp!')):
+                (mnemonic.startswith('ldmi') and args.startswith('sp!')) or \
+                (mnemonic.startswith('pop') and args.find('pc') >= 0):
                 sp += 4 * len(args[args.find('{') :].split(','))
                 if args.find('pc') > 0:
                     info('frame (pop pc) @ %x : %x', pc, sp)
@@ -206,21 +232,27 @@ class Frame:
 
             elif mnemonic == 'add' and args.startswith('sp'):
                 assert args.split(',')[1].find('r') < 0, \
-                        'ADD with ' + args + ' (pc = ' + hex(pc) + ')'
+                        'unhandled add: ' + args + ' (pc = ' + hex(pc) + ')'
                 sp += int(args[args.find('#') + 1 :], 0)
 
             elif mnemonic == 'sub' and args.startswith('sp'):
                 assert args.split(',')[1].find('r') < 0, \
-                        'SUB with ' + args + ' (pc = ' + hex(pc) + ')'
+                        'unhandled sub: ' + args + ' (pc = ' + hex(pc) + ')'
                 sp -= int(args[args.find('#') + 1 :], 0)
 
-            elif args.startswith('pc') or (args.find('pc') < args.find('}')):
-                warning('unknown instruction (%s %s) affected pc',
-                        mnemonic, args)
+            elif args.startswith('pc') or ((args.find('pc') > args.find('{'))
+                                    and (args.find('pc') < args.find('}'))):
+                warning('unknown instruction at %s (%s %s) affected pc',
+                        hex(pc), mnemonic, args)
 
-            elif args.startswith('sp') or (args.find('sp') < args.find('}')):
-                warning('unknown instruction (%s %s) affected sp',
-                        mnemonic, args)
+            elif args.startswith('sp') or ((args.find('sp') > args.find('{'))
+                                    and (args.find('sp') < args.find('}'))):
+                warning('unknown instruction at %s (%s %s) affected sp',
+                        hex(pc), mnemonic, args)
+
+            elif mnemonic.startswith('pop') or mnemonic.startswith('push'):
+                warning('conditional instruction at %s (%s %s) affected sp',
+                        hex(pc), mnemonic, args)
 
     def unwind(self):
         # don't let value of cpsr affect our results
@@ -237,7 +269,7 @@ is_thumb = (gdb.parse_and_eval('$cpsr') & 0x20) != 0
 
 f = Frame(pc, sp, is_thumb)
 print '#0: ' + str(f)
-for i in range(1, 10):
+for i in range(1, 100):
     f = f.unwind()
     print '#{0}: {1}'.format(i, str(f))
 
