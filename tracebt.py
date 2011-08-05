@@ -63,6 +63,18 @@ class Frame:
         return 'frame {0:#08x} in function {1} ({2:#08x}) from {3}'.format(
                 self.sp, func, pc, lib)
 
+    def __cmp__(self, other):
+        if self.pc != other.pc:
+            return self.pc - other.pc
+        if self.sp != other.sp:
+            return self.sp - other.sp
+        if self.is_thumb == other.is_thumb:
+            return 0
+        return id(self) - id(other)
+
+    def __hash__(self):
+        return self.pc ^ self.sp ^ (-1 if self.is_thumb else 0)
+
     def _unwind(self):
 
         class Branch:
@@ -73,7 +85,9 @@ class Frame:
                 self.tryTake = False
             def __cmp__(self, other):
                 return self.pc - other if type(other) is int \
-                    else self.pc - other.pc
+                                        else self.pc - other.pc
+            def __hash__(self):
+                return self.pc
             def __str__(self):
                 return hex(self.pc) + '[' + \
                     ('c' if self.is_cond else '') + \
@@ -118,7 +132,7 @@ class Frame:
                     if not match:
                         continue
                     # update pc
-                    ipc = int(match.group(1).strip(), 0)
+                    ipc = int(match.group(1).strip(), 0) & ~1
                     # don't go past end because another range might cover it
                     if ipc > end:
                         break
@@ -155,7 +169,8 @@ class Frame:
                 assert self._curRange, "cannot load instructions!"
                 self._curIndex = next((i for i in range(len(self._curRange[3]))
                                     if self._curRange[3][i][0] > pc), -1) - 2
-                assert self._curIndex >= -1, "instruction not in range!"
+                assert self._curIndex >= -1, "instruction at " + \
+                                                hex(pc) + " not in range!"
 
         branchHistory = []
         assemblyCache = AssemblyCache(self.pc, self.is_thumb)
@@ -174,8 +189,6 @@ class Frame:
                 elif branchHistory[-1].tryTake:
                     branchHistory[-1].tryTake = False
                 elif branchHistory[-1] == pc: # nowhere else to go
-                    assert branchHistory[-1].take, \
-                        "branch should have been skipped!"
                     condid = next((i for i in
                                     reversed(range(len(branchHistory)))
                                     if not branchHistory[i].take), -1)
@@ -195,6 +208,10 @@ class Frame:
                     warning('frame (bx lr) @ %x : %x', pc, sp)
                     pc = int(gdb.parse_and_eval('(unsigned)$lr'))
                     return Frame(pc, sp, (pc & 1) != 0)
+                elif args.startswith('r'):
+                    warning('skipped unconditional branch (%s %s) @ %x : %x',
+                            mnemonic, args, pc, sp)
+                    continue
                 (new_block, pc, is_thumb) = traceBranch(False)
                 # always take unconditional branches
                 assemblyCache.jump(pc, is_thumb)
@@ -270,6 +287,10 @@ is_thumb = (gdb.parse_and_eval('$cpsr') & 0x20) != 0
 f = Frame(pc, sp, is_thumb)
 print '#0: ' + str(f)
 for i in range(1, 100):
-    f = f.unwind()
-    print '#{0}: {1}'.format(i, str(f))
+    newf = f.unwind()
+    if newf == f:
+        print 'no more reachable frames'
+        break
+    print '#{0}: {1}'.format(i, str(newf))
+    f = newf
 
