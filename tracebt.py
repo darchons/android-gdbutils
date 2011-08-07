@@ -222,6 +222,9 @@ class Frame:
                      'vs', 'vc', 'hi', 'ls', 'ge', 'lt', 'gt', 'le']:
                 if mnemonic.startswith('cb'):
                     args = args[args.find(',') + 1 :].lstrip()
+                if args == 'lr':
+                    warning('skipped conditional bx lr @ %x : %x', pc, sp)
+                    continue
                 (new_block, pc, is_thumb) = traceBranch(True)
                 if new_block:
                     assemblyCache.jump(pc, is_thumb)
