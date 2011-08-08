@@ -35,4 +35,25 @@
 #
 # ***** END LICENSE BLOCK *****
 
+class ADB:
+    adb = 'adb'
 
+class FenInit(gdb.Command):
+    '''Initialize gdb for debugging Fennec on Android'''
+
+    def __init__(self):
+        super(FenInit, self).__init__("feninit", gdb.COMMAND_SUPPORT)
+
+    def complete(self, text, word):
+        return gdb.COMPLETE_NONE
+
+    def invoke(self, argument, from_tty):
+        # identify device
+        # identify objdir
+        # pull libs, linker, app_process
+        # set symbols dir
+        # push gdbserver
+        # forward port
+        # am start
+        # attach gdbserver
+        pass        
