@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import re, sys, logging, os
+import gdb, re, logging, os
 from logging import debug, info, warning, error, critical, exception
 
 logging.getLogger().setLevel(logging.WARNING)

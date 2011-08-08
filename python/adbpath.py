@@ -35,6 +35,8 @@
 #
 # ***** END LICENSE BLOCK *****
 
+import gdb
+
 class ADBPath(gdb.Parameter):
     '''When set, use the specified path when launching ADB instead of "adb"'''
     set_doc = 'Set path of Android ADB tool'

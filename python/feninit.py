@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import subprocess, re
+import gdb, subprocess, re
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''

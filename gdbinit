@@ -36,6 +36,6 @@
 # ***** END LICENSE BLOCK *****
 
 # Load python utilities
-python execfile("adbpath.py")
-python execfile("feninit.py")
+python import adbpath
+python import feninit
 
