@@ -35,44 +35,23 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import subprocess, re
-
-class FenInit(gdb.Command):
-    '''Initialize gdb for debugging Fennec on Android'''
+class ADBPath(gdb.Parameter):
+    '''When set, use the specified path when launching ADB instead of "adb"'''
+    set_doc = 'Set path of Android ADB tool'
+    show_doc = 'Show path of Android ADB tool'
 
     def __init__(self):
-        super(FenInit, self).__init__('feninit', gdb.COMMAND_SUPPORT)
+        super(ADBPath, self).__init__('adb-path',
+                gdb.COMMAND_SUPPORT, gdb.PARAM_OPTIONAL_FILENAME)
+        self.value = None
+        self.get_set_string()
 
-    def complete(self, text, word):
-        return gdb.COMPLETE_NONE
+    def get_set_string(self):
+        self.value = self.value.strip() if self.value else 'adb'
+        return 'New Android ADB tool is "' + self.value + '"'
 
-    def _callADB(self, args):
-        cmd = [str(gdb.parameter('adb-path'))]
-        cmd.extend(args)
-        try:
-            adb = subprocess.Popen(cmd, stdin=subprocess.PIPE,
-                                        stdout=subprocess.PIPE)
-            out = adb.communicate()[0]
-        except OSError, e:
-            raise gdb.GdbError('cannot run adb: ' + str(e))
-        if adb.returncode != 0:
-            raise gdb.GdbError('adb returned exit code ' + str(adb.returncode))
-        return out
+    def get_show_string(self, svalue):
+        return 'Android ADB tool is "' + svalue + '"'
 
-    def invoke(self, argument, from_tty):
-        # identify device
-        devs = []
-        for sdev in self._callADB(['devices']).splitlines():
-            # TODO parse device list
-            pass
-        # identify objdir
-        # pull libs, linker, app_process
-        # set symbols dir
-        # push gdbserver
-        # forward port
-        # am start
-        # attach gdbserver
-        pass        
-
-FenInit()
+ADBPath()
 
