@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb
+import gdb, subprocess
 
 class ADBPath(gdb.Parameter):
     '''When set, use the specified path when launching ADB instead of "adb"'''
@@ -55,5 +55,47 @@ class ADBPath(gdb.Parameter):
     def get_show_string(self, svalue):
         return 'Android ADB tool is "' + svalue + '"'
 
-ADBPath()
+path = ADBPath()
+dev = None
+returncode = 0
+
+def call(args, **kw):
+    cmd = [path.value]
+    if dev:
+        cmd.extend(['-s', dev])
+    cmd.extend(args)
+    try:
+        adb = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                    stdout=subprocess.PIPE, **kw)
+        out = adb.communicate()[0]
+        returncode = adb.returncode
+    except OSError, e:
+        raise gdb.GdbError('cannot run adb: ' + str(e))
+    if adb.returncode != 0:
+        raise gdb.GdbError('adb returned exit code ' + str(adb.returncode))
+    return out
+
+def getDevices():
+    devs = []
+    for sdev in call(['devices']).splitlines():
+        devparts = sdev.partition('\t')
+        if devparts[2] != 'device':
+            continue
+        devs.append(devparts[0].strip())
+    return devs
+
+def waitForDevice():
+    call(['wait-for-device'])
+
+def setDevice(device = None):
+    dev = device
+
+def pull(src, dest):
+    params = ['pull']
+    if isinstance(src, list):
+        params.extend(src)
+    else:
+        params.append(str(src))
+    params.append(dest)
+    call(params, stderr=subprocess.PIPE)
 
