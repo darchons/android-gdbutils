@@ -383,7 +383,8 @@ class FenInit(gdb.Command):
 
     def invoke(self, argument, from_tty):
         try:
-            saved_height = int(gdb.parameter('height'))
+            saved_height = gdb.parameter('height')
+            saved_height = int(saved_height) if saved_height else 0
             gdb.execute('set height 0') # suppress pagination
             if hasattr(self, 'gdbserver') and self.gdbserver:
                 if self.gdbserver.poll() is None:
