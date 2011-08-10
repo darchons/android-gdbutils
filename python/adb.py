@@ -64,12 +64,21 @@ def call(args, **kw):
     if dev:
         cmd.extend(['-s', dev])
     cmd.extend(args)
+    async = False
+    if 'async' in kw:
+        async = kw['async']
+        del kw['async']
+    if 'stdin' not in kw:
+        kw['stdin'] = subprocess.PIPE
+    if 'stdout' not in kw:
+        kw['stdout'] = subprocess.PIPE
     try:
-        adb = subprocess.Popen(cmd, stdin=subprocess.PIPE,
-                                    stdout=subprocess.PIPE, **kw)
+        adb = subprocess.Popen(cmd, **kw)
+        if async:
+            return adb
         out = adb.communicate()[0]
         returncode = adb.returncode
-    except OSError, e:
+    except OSError as e:
         raise gdb.GdbError('cannot run adb: ' + str(e))
     if adb.returncode != 0:
         raise gdb.GdbError('adb returned exit code ' + str(adb.returncode))
@@ -98,4 +107,22 @@ def pull(src, dest):
         params.append(str(src))
     params.append(dest)
     call(params, stderr=subprocess.PIPE)
+
+def push(src, dest):
+    params = ['push']
+    if isinstance(src, list):
+        params.extend(src)
+    else:
+        params.append(str(src))
+    params.append(dest)
+    call(params, stderr=subprocess.PIPE)
+
+def pathExists(path):
+    # adb shell doesn't seem to return error codes
+    out = call(['shell', 'ls "' + path + '"; echo $?'],
+            stderr=subprocess.PIPE)
+    return int(out.splitlines()[-1]) == 0
+
+def forward(from_port, to_port):
+    call(['forward', from_port, to_port])
 
