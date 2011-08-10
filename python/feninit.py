@@ -383,13 +383,13 @@ class FenInit(gdb.Command):
 
     def invoke(self, argument, from_tty):
         try:
+            saved_height = int(gdb.parameter('height'))
+            gdb.execute('set height 0') # suppress pagination
             if hasattr(self, 'gdbserver') and self.gdbserver:
                 if self.gdbserver.poll() is None:
                     print 'Already in remote debug mode.'
                     return
                 delattr(self, 'gdbserver')
-            saved_height = int(gdb.parameter('height'))
-            gdb.execute('set height 0') # suppress pagination
             self._chooseDevice()
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
