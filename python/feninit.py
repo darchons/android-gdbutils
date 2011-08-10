@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, readinput, os, sys, subprocess, signal
+import gdb, adb, readinput, os, sys, subprocess, time
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -254,6 +254,9 @@ class FenInit(gdb.Command):
             print ''
             print out
             raise gdb.GdbError('Error while launching %s.' % pkg)
+
+        # FIXME sleep for 1s to allow time to launch
+        time.sleep(1)
 
         # wait for launch to complete
         pkgProcs = None
