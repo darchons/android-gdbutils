@@ -38,3 +38,7 @@
 # Load python utilities
 python import feninit
 
+# Uncomment to change feninit behavior
+#python feninit.default.device = 'DEVICE-SERIAL'
+#python feninit.default.objdir = '/home/user/mozilla/objdir-android'
+
