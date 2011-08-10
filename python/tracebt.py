@@ -283,17 +283,57 @@ class Frame:
         finally:
             gdb.execute('set $cpsr=' + hex(saved_cpsr))
 
-pc = int(gdb.parse_and_eval('(unsigned)$pc'))
-sp = int(gdb.parse_and_eval('(unsigned)$sp'))
-is_thumb = (gdb.parse_and_eval('$cpsr') & 0x20) != 0
+class TraceBT(gdb.Command):
+    '''Unwind stack by tracing instructions'''
 
-f = Frame(pc, sp, is_thumb)
-print '#0: ' + str(f)
-for i in range(1, 100):
-    newf = f.unwind()
-    if newf == f:
+    def __init__(self):
+        super(TraceBT, self).__init__('tracebt', gdb.COMMAND_STACK)
+
+    def complete(self, text, word):
+        return gdb.COMPLETE_NONE
+
+    def invoke(self, argument, from_tty):
+        ARG_NAMES = ['pc', 'sp', 'is_thumb']
+
+        self.dont_repeat()
+        vals = [None for i in ARG_NAMES] # pc, sp, is_thumb
+        try:
+            args = gdb.string_to_argv(argument)
+            if len(args) > len(ARG_NAMES):
+                raise gdb.GdbError('Too many arguments!')
+
+            for i in range(len(args)):
+                arg = args[i].partition('=')
+                if not arg[0]:
+                    vals[i] = gdb.parse_and_eval(arg[2])
+                elif arg[0] in ARG_NAMES:
+                    vals[ARG_NAMES.index(arg[0])] = gdb.parse_and_eval(arg[2])
+                else:
+                    raise gdb.GdbError('invalid argument name')
+
+            if vals[0] and not vals[2]:
+                #infer thumb state
+                vals[2] = (vals[0] & 1) != 0
+
+            pc = int(vals[0] if vals[0] else \
+                    gdb.parse_and_eval('(unsigned)$pc'))
+            sp = int(vals[1] if vals[1] else \
+                    gdb.parse_and_eval('(unsigned)$sp'))
+            is_thumb = bool(vals[0] if vals[0] else \
+                    (gdb.parse_and_eval('$cpsr') & 0x20) != 0)
+        except gdb.GdbError:
+            raise
+        except (ValueError, gdb.error) as e:
+            raise gdb.GdbError('cannot parse argument: ' + str(e))
+
+        fid = 0
+        f = Frame(0, 0, False)
+        newf = Frame(pc, sp, is_thumb)
+        while newf != f:
+            print '#{0}: {1}'.format(fid, str(newf))
+            f = newf
+            newf = f.unwind()
+            fid += 1
         print 'no more reachable frames'
-        break
-    print '#{0}: {1}'.format(i, str(newf))
-    f = newf
 
+default = TraceBT()
