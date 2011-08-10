@@ -36,9 +36,12 @@
 # ***** END LICENSE BLOCK *****
 
 # Load python utilities
-python import feninit
+python import feninit, tracebt
 
 # Uncomment to change feninit behavior
+
+#set adb-path /PATH/TO/SDK/platform-tools/adb
+
 #python feninit.default.device = 'DEVICE-SERIAL'
 #python feninit.default.objdir = '/home/user/mozilla/objdir-android'
 
