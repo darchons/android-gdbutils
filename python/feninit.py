@@ -297,8 +297,8 @@ class FenInit(gdb.Command):
             # ok, no child is available. assume the user
             # wants to wait for child to start up
             pkgProcs = None
+            print 'Waiting for child process...'
             while not pkgProcs:
-                print 'Waiting for child process...'
                 ps = adb.call(['shell', 'ps']).splitlines()
                 # check for 'S' state, for right parent, and for right child
                 pkgProcs = [x for x in ps if 'S' in x and \
