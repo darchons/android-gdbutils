@@ -259,11 +259,12 @@ class FenInit(gdb.Command):
         time.sleep(1)
 
         # wait for launch to complete
-        pkgProcs = None
-        while not pkgProcs:
+        pkgProcs = []
+        while not [True for x in pkgProcs if CHILD_EXECUTABLE not in x]:
             ps = adb.call(['shell', 'ps']).splitlines()
             # get parent/child processes that are waiting ('S' state)
-            pkgProcs = [x for x in ps if pkg in x and 'S' in x.split()]
+            pkgProcs = [x for x in ps if pkg in x and
+                    ('S' in x.split() or 'T' in x.split())]
         print 'Done'
 
         # get parent/child(ren) pid's
@@ -301,7 +302,7 @@ class FenInit(gdb.Command):
             while not pkgProcs:
                 ps = adb.call(['shell', 'ps']).splitlines()
                 # check for 'S' state, for right parent, and for right child
-                pkgProcs = [x for x in ps if 'S' in x and \
+                pkgProcs = [x for x in ps if ('S' in x or 'T' in x) and \
                         pidChildParent in x and CHILD_EXECUTABLE in x]
             pidChild = [x.split()[1] for x in pkgProcs]
 
