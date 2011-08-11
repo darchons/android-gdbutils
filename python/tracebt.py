@@ -304,8 +304,8 @@ class TraceBT(gdb.Command):
 
             for i in range(len(args)):
                 arg = args[i].partition('=')
-                if not arg[0]:
-                    vals[i] = gdb.parse_and_eval(arg[2])
+                if not arg[1]:
+                    vals[i] = gdb.parse_and_eval(arg[0])
                 elif arg[0] in ARG_NAMES:
                     vals[ARG_NAMES.index(arg[0])] = gdb.parse_and_eval(arg[2])
                 else:
