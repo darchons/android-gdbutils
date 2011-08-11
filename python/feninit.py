@@ -375,8 +375,8 @@ class FenInit(gdb.Command):
         sys.stdout.write('Setting up remote debugging... ')
         sys.stdout.flush()
         # load the right file
-        gdb.execute('file ' + PARENT_FILE_PATH
-                if pidParent else CHILD_FILE_PATH, False, True)
+        gdb.execute('file ' + (PARENT_FILE_PATH
+                if pidParent else CHILD_FILE_PATH), False, True)
         gdb.execute('target remote :' + port, False, True)
         print 'Done\n'
 
