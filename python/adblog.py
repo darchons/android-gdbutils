@@ -35,13 +35,27 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import adb
+import adb, threading
+
+class ADBLog(threading.Thread):
+    def run(self):
+        while self.logcat.poll() == None:
+            print self.logcat.stdout.readline()
+
+default = None
 
 def cont_handler(event):
-    pass
+    if default:
+        stop_handler(event)
+    default = ADBLog()
+    default.logcat = adb.call(['logcat', async=True)
+    default.start()
 
 def stop_handler(event):
-    pass
+    if default:
+        if default.logcat:
+            default.logcat.terminate()
+        default = None
 
 gdb.events.cont.connect(cont_handler)
 gdb.events.stop.connect(stop_handler)

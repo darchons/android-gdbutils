@@ -37,7 +37,7 @@
 
 # Load python utilities
 python import adbparams
-python import feninit, tracebt
+python import feninit, tracebt, adblog
 
 # Uncomment to change feninit behavior
 
