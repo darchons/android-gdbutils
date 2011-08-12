@@ -37,25 +37,6 @@
 
 import gdb, subprocess
 
-class ADBPath(gdb.Parameter):
-    '''When set, use the specified path when launching ADB instead of "adb"'''
-    set_doc = 'Set path of Android ADB tool'
-    show_doc = 'Show path of Android ADB tool'
-
-    def __init__(self):
-        super(ADBPath, self).__init__('adb-path',
-                gdb.COMMAND_SUPPORT, gdb.PARAM_OPTIONAL_FILENAME)
-        self.value = None
-        self.get_set_string()
-
-    def get_set_string(self):
-        self.value = self.value.strip() if self.value else 'adb'
-        return 'New Android ADB tool is "' + self.value + '"'
-
-    def get_show_string(self, svalue):
-        return 'Android ADB tool is "' + svalue + '"'
-
-path = ADBPath()
 dev = None
 returncode = 0
 
