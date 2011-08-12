@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import adb, threading
+import gdb, adb, threading
 
 class ADBLog(threading.Thread):
     def run(self):
@@ -47,8 +47,9 @@ default = None
 def cont_handler(event):
     if default:
         stop_handler(event)
+    adb.chooseDevice()
     default = ADBLog()
-    default.logcat = adb.call(['logcat', async=True)
+    default.logcat = adb.call(['logcat', '-v', 'device'], async=True)
     default.start()
 
 def stop_handler(event):
