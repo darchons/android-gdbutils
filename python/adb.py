@@ -35,13 +35,13 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, subprocess
+import gdb, subprocess, readinput
 
-dev = None
 returncode = 0
 
 def call(args, **kw):
-    cmd = [path.value]
+    cmd = [str(gdb.parameter('adb-path'))]
+    dev = str(gdb.parameter('adb-device'))
     if dev:
         cmd.extend(['-s', dev])
     cmd.extend(args)
@@ -77,8 +77,42 @@ def getDevices():
 def waitForDevice():
     call(['wait-for-device'])
 
-def setDevice(device = None):
-    dev = device
+def chooseDevice():
+    # identify device
+    devs = getDevices()
+
+    # wait for a device if no device is found
+    while not devs:
+        try:
+            print 'ADB: waiting for device... (Ctrl+C to stop)'
+            waitForDevice()
+        except gdb.GdbError, KeyboardInterrupt:
+            raise gdb.GdbError(' ADB: no device')
+        devs = getDevices()
+
+    # use saved setting if possible; also allows gdbinit to set device
+    dev = str(gdb.parameter('adb-device'))
+    if dev and dev not in devs:
+        print 'feninit.default.device (%s) is not connected' % dev
+    # use only device
+    if len(devs) == 1:
+        dev = devs[0]
+    # otherwise, let user decide
+    while not dev in devs:
+        print 'Found multiple devices:'
+        for i in range(len(devs)):
+            print '%d. %s' % (i + 1, devs[i])
+        dev = readinput.call('Choose device: ', '-l', str(devs))
+        if dev.isdigit() and int(dev) > 0 and int(dev) <= len(devs):
+            dev = devs[int(dev) - 1]
+        elif len(dev) > 0:
+            matchDev = filter(
+                    lambda x: x.lower().startswith(dev.lower()), devs)
+            # if only one match, use it
+            if len(matchDev) == 1:
+                dev = matchDev[0]
+    gdb.execute('set adb-device ' + dev)
+    return dev
 
 def pull(src, dest):
     params = ['pull']

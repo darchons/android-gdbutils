@@ -64,10 +64,11 @@ class ADBDevice(gdb.Parameter):
 
     def __init__(self):
         super(ADBDevice, self).__init__('adb-device',
-                gdb.COMMAND_SUPPORT, PARAM_STRING)
+                gdb.COMMAND_SUPPORT, gdb.PARAM_STRING)
         self.value = None
 
     def get_set_string(self):
+        self.value = self.value if self.value else ''
         return 'New ADB device is "' + self.value + '"'
 
     def get_show_string(self, svalue):

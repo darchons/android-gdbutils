@@ -47,43 +47,8 @@ class FenInit(gdb.Command):
         return gdb.COMPLETE_NONE
 
     def _chooseDevice(self):
-        # identify device
-        dev = ''
-        devs = adb.getDevices()
-
-        # wait for a device if no device is found
-        while not devs:
-            try:
-                print 'ADB: waiting for device... (Ctrl+C to stop)'
-                adb.waitForDevice()
-            except gdb.GdbError, KeyboardInterrupt:
-                raise gdb.GdbError(' ADB: no device')
-            devs = adb.getDevices()
-
-        # use saved setting if possible; also allows gdbinit to set device
-        if hasattr(self, 'device'):
-            dev = self.device
-            if dev not in devs:
-                print 'feninit.default.device (%s) is not connected' % dev
-        # use only device
-        if len(devs) == 1:
-            dev = devs[0]
-        # otherwise, let user decide
-        while not dev in devs:
-            print 'Found multiple devices:'
-            for i in range(len(devs)):
-                print '%d. %s' % (i + 1, devs[i])
-            dev = readinput.call('Choose device: ', '-l', str(devs))
-            if dev.isdigit() and int(dev) > 0 and int(dev) <= len(devs):
-                dev = devs[int(dev) - 1]
-            elif len(dev) > 0:
-                matchDev = filter(
-                        lambda x: x.lower().startswith(dev.lower()), devs)
-                # if only one match, use it
-                if len(matchDev) == 1:
-                    dev = matchDev[0]
+        dev = adb.chooseDevice()
         print 'Using device %s' % dev
-        adb.setDevice(dev)
         self.device = dev
 
     def _chooseObjdir(self):
