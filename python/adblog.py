@@ -35,29 +35,31 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, threading
+import gdb, adb, threading, sys
 
 class ADBLog(threading.Thread):
+    def __init__(self):
+        super(ADBLog, self).__init__()
+        self.logcat = adb.call(['logcat', '-v', 'thread'], async=True)
+
     def run(self):
         while self.logcat.poll() == None:
-            print self.logcat.stdout.readline()
+            line = self.logcat.stdout.readline()
+            if line:
+                sys.__stdout__.write(printLine)
 
-default = None
+    def stop_handler(self, event):
+        try:
+            self.logcat.terminate()
+        except OSError:
+            pass # process might be already terminated
+        gdb.events.stop.disconnect(self.stop_handler)
 
 def cont_handler(event):
-    if default:
-        stop_handler(event)
     adb.chooseDevice()
-    default = ADBLog()
-    default.logcat = adb.call(['logcat', '-v', 'device'], async=True)
-    default.start()
-
-def stop_handler(event):
-    if default:
-        if default.logcat:
-            default.logcat.terminate()
-        default = None
+    adblog = ADBLog()
+    gdb.events.stop.connect(adblog.stop_handler)
+    adblog.start()
 
 gdb.events.cont.connect(cont_handler)
-gdb.events.stop.connect(stop_handler)
 
