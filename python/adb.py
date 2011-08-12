@@ -111,7 +111,8 @@ def chooseDevice():
             # if only one match, use it
             if len(matchDev) == 1:
                 dev = matchDev[0]
-    gdb.execute('set adb-device ' + dev)
+    if str(gdb.parameter('adb-device')) != dev:
+        gdb.execute('set adb-device ' + dev)
     return dev
 
 def pull(src, dest):
