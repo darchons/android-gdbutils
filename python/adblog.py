@@ -46,7 +46,7 @@ class ADBLog(threading.Thread):
         while self.logcat.poll() == None:
             line = self.logcat.stdout.readline()
             if line:
-                sys.__stdout__.write(printLine)
+                sys.__stderr__.write(line)
 
     def stop_handler(self, event):
         try:
@@ -56,6 +56,8 @@ class ADBLog(threading.Thread):
         gdb.events.stop.disconnect(self.stop_handler)
 
 def cont_handler(event):
+    if not isinstance(event, gdb.ContinueEvent):
+        return
     adb.chooseDevice()
     adblog = ADBLog()
     gdb.events.stop.connect(adblog.stop_handler)
