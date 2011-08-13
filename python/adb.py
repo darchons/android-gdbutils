@@ -35,32 +35,13 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, subprocess
+import gdb, subprocess, readinput
 
-class ADBPath(gdb.Parameter):
-    '''When set, use the specified path when launching ADB instead of "adb"'''
-    set_doc = 'Set path of Android ADB tool'
-    show_doc = 'Show path of Android ADB tool'
-
-    def __init__(self):
-        super(ADBPath, self).__init__('adb-path',
-                gdb.COMMAND_SUPPORT, gdb.PARAM_OPTIONAL_FILENAME)
-        self.value = None
-        self.get_set_string()
-
-    def get_set_string(self):
-        self.value = self.value.strip() if self.value else 'adb'
-        return 'New Android ADB tool is "' + self.value + '"'
-
-    def get_show_string(self, svalue):
-        return 'Android ADB tool is "' + svalue + '"'
-
-path = ADBPath()
-dev = None
 returncode = 0
 
 def call(args, **kw):
-    cmd = [path.value]
+    cmd = [str(gdb.parameter('adb-path'))]
+    dev = str(gdb.parameter('adb-device'))
     if dev:
         cmd.extend(['-s', dev])
     cmd.extend(args)
@@ -96,8 +77,43 @@ def getDevices():
 def waitForDevice():
     call(['wait-for-device'])
 
-def setDevice(device = None):
-    dev = device
+def chooseDevice():
+    # identify device
+    devs = getDevices()
+
+    # wait for a device if no device is found
+    while not devs:
+        try:
+            print 'ADB: waiting for device... (Ctrl+C to stop)'
+            waitForDevice()
+        except gdb.GdbError, KeyboardInterrupt:
+            raise gdb.GdbError(' ADB: no device')
+        devs = getDevices()
+
+    # use saved setting if possible; also allows gdbinit to set device
+    dev = str(gdb.parameter('adb-device'))
+    if dev and dev not in devs:
+        print 'feninit.default.device (%s) is not connected' % dev
+    # use only device
+    if len(devs) == 1:
+        dev = devs[0]
+    # otherwise, let user decide
+    while not dev in devs:
+        print 'Found multiple devices:'
+        for i in range(len(devs)):
+            print '%d. %s' % (i + 1, devs[i])
+        dev = readinput.call('Choose device: ', '-l', str(devs))
+        if dev.isdigit() and int(dev) > 0 and int(dev) <= len(devs):
+            dev = devs[int(dev) - 1]
+        elif len(dev) > 0:
+            matchDev = filter(
+                    lambda x: x.lower().startswith(dev.lower()), devs)
+            # if only one match, use it
+            if len(matchDev) == 1:
+                dev = matchDev[0]
+    if str(gdb.parameter('adb-device')) != dev:
+        gdb.execute('set adb-device ' + dev)
+    return dev
 
 def pull(src, dest):
     params = ['pull']
