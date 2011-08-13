@@ -409,7 +409,7 @@ class FenInit(gdb.Command):
                 delattr(self, 'gdbserver')
             raise
         finally:
-            gdb.execute('set height ' + str(saved_height), False, True)
+            gdb.execute('set height ' + str(saved_height), False, False)
 
 default = FenInit()
 
