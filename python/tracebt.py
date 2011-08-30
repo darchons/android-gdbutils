@@ -57,7 +57,16 @@ class Frame:
             block = gdb.block_for_pc(pc)
         except RuntimeError:
             block = None
-        func = block.function.print_name if block and block.function else '??'
+        if block and block.is_valid() and block.function:
+            func = block.function.print_name
+        else:
+            func = gdb.execute('info symbol ' + hex(pc), True, True).strip()
+            if func.startswith('No symbol'):
+                func = '??'
+        for sep in ['(', '+', 'in section']:
+            if sep in func:
+                func = func[: func.find(sep)].strip()
+                break
         lib = gdb.solib_name(pc)
         lib = os.path.basename(lib) if lib else '??'
         return 'frame {0:#08x} in function {1} ({2:#08x}) from {3}'.format(
