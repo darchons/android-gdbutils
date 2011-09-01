@@ -335,14 +335,17 @@ class TraceBT(gdb.Command):
         except (ValueError, gdb.error) as e:
             raise gdb.GdbError('cannot parse argument: ' + str(e))
 
-        fid = 0
-        f = Frame(0, 0, False)
-        newf = Frame(pc, sp, is_thumb)
-        while newf != f:
-            print '#{0}: {1}'.format(fid, str(newf))
-            f = newf
-            newf = f.unwind()
-            fid += 1
+        try:
+            fid = 0
+            f = Frame(0, 0, False)
+            newf = Frame(pc, sp, is_thumb)
+            while newf != f:
+                print '#{0}: {1}'.format(fid, str(newf))
+                f = newf
+                newf = f.unwind()
+                fid += 1
+        except KeyboardInterrupt:
+            raise gdb.GdbError("interrupted")
         print 'no more reachable frames'
 
 default = TraceBT()
