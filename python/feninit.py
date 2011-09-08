@@ -71,14 +71,15 @@ class FenInit(gdb.Command):
         objdir = '' # None means don't use an objdir
         objdirs = []
         # look for possible locations
-        scanSrcDir(objdirs, '~/mozilla-central')
-        scanSrcDir(objdirs, '~/central')
-        scanSrcDir(objdirs, '~/mozilla-aurora')
-        scanSrcDir(objdirs, '~/aurora')
-        scanSrcDir(objdirs, '~/mozilla-beta')
-        scanSrcDir(objdirs, '~/beta')
-        scanSrcDir(objdirs, '~/mozilla-release')
-        scanSrcDir(objdirs, '~/release')
+        srcroot = self.srcroot if hasattr(self, 'srcroot') else '~'
+        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-central'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'central'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-aurora'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'aurora'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-beta'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'beta'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-release'))
+        scanSrcDir(objdirs, os.path.join(srcroot, 'release'))
         objdirs.sort()
 
         # use saved setting if possible; also allows gdbinit to set objdir
