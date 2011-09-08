@@ -44,7 +44,14 @@ python import feninit, tracebt
 #set adb-path /PATH/TO/SDK/platform-tools/adb
 #set adb-device DEVICE-SERIAL
 
-#python feninit.default.objdir = '/home/user/mozilla/objdir-android'
+# feninit.default.objdir will be used as object directory if specified
+# otherwise, feninit.default.srcroot will be scanned for directories
+#   named 'mozilla-central', 'mozilla-aurora', etc.
+# if feninit.default.srcroot is not specified,
+#   current user directory is scanned
+
+#python feninit.default.objdir = '~/mozilla/central/objdir-android'
+#python feninit.default.srcroot = '~/mozilla'
 
 feninit
 
