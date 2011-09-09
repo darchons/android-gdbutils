@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, readinput, os, sys, subprocess, time
+import gdb, adb, readinput, os, sys, subprocess, threading, time
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -334,6 +334,14 @@ class FenInit(gdb.Command):
 
         self.port = port
         self.gdbserver = gdbserverProc
+
+        # collect output from gdbserver in another thread
+        def makeGdbserverWait(obj, proc):
+            def gdbserverWait():
+                obj.gdbserverOut = proc.communicate();
+            return gdbserverWait;
+        threading.Thread(
+                target = makeGdbserverWait(self, gdbserverProc)).start()
 
         # forward the port that gdbserver gave us
         adb.forward('tcp:' + port, 'tcp:' + port)
