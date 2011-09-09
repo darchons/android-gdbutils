@@ -35,23 +35,16 @@
 #
 # ***** END LICENSE BLOCK *****
 
-# Load python utilities
-python import adbparams
-python import feninit, tracebt, fastload
+import gdb
 
-# Uncomment to change feninit behavior
+class FastLoader(threading.Thread):
 
-#set adb-path /PATH/TO/SDK/platform-tools/adb
-#set adb-device DEVICE-SERIAL
+    def run(self):
+        pass
 
-# feninit.default.objdir will be used as object directory if specified
-# otherwise, feninit.default.srcroot will be scanned for directories
-#   named 'mozilla-central', 'mozilla-aurora', etc.
-# if feninit.default.srcroot is not specified,
-#   current user directory is scanned
+    def stop_handler(self, event):
+        pass
 
-#python feninit.default.objdir = '~/mozilla/central/objdir-android'
-#python feninit.default.srcroot = '~/mozilla'
-
-feninit
+default = FastLoader()
+gdb.events.stop.connect(default.stop_handler)
 
