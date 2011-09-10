@@ -39,6 +39,7 @@
 python import adbparams
 python import feninit, tracebt, adblog
 
+
 # Uncomment to change feninit behavior
 
 #set adb-path /PATH/TO/SDK/platform-tools/adb
@@ -52,6 +53,11 @@ python import feninit, tracebt, adblog
 
 #python feninit.default.objdir = '~/mozilla/central/objdir-android'
 #python feninit.default.srcroot = '~/mozilla'
+
+
+# Disable logcat redirection
+#set adb-redirect-logcat off
+
 
 feninit
 
