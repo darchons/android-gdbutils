@@ -150,13 +150,13 @@ def cont_handler(event):
     log_width = int(gdb.parameter('width'))
     adblog.running = True
 
-def stop_handler(event=None):
+def stop_handler(event):
     global adblog
     if not adblog:
         return
     adblog.running = False
 
-def exit_handler(event=None):
+def exit_handler(event):
     global adblog
     if not adblog:
         return
