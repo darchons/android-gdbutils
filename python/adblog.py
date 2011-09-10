@@ -60,7 +60,7 @@ class LogRedirect(gdb.Parameter):
     show_doc = 'Show current "adb logcat" redirection setting'
 
     def __init__(self):
-        super(LogRedirect, self).__init__('adb-redirect-logcat',
+        super(LogRedirect, self).__init__('adb-log-redirect',
                 gdb.COMMAND_SUPPORT, gdb.PARAM_BOOLEAN)
         self.value = True
         self.get_set_string()
@@ -139,7 +139,7 @@ class ADBLog(threading.Thread):
 def cont_handler(event):
     if not isinstance(event, gdb.ContinueEvent):
         return
-    if not bool(gdb.parameter('adb-redirect-logcat')):
+    if not bool(gdb.parameter('adb-log-redirect')):
         exit_handler(event)
         return
     global adblog, log_width

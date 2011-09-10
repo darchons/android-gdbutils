@@ -56,7 +56,7 @@ python import feninit, tracebt, adblog
 
 
 # Disable logcat redirection
-#set adb-redirect-logcat off
+#set adb-log-redirect off
 
 
 feninit

@@ -57,7 +57,7 @@ Logs are outputted with cyclic colors, to easily distinguish between identical l
 
 #### Configuration
 
-    gdb> set adb-redirect-logcat on|off
+    gdb> set adb-log-redirect on|off
 
 Enable or disable log redirection
 
