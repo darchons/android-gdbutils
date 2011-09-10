@@ -44,3 +44,34 @@ Initialize Fennec for Android debugging environment in GDB, in the following ord
 * Uploading and launching gdbserver
 * Attaching gdbserver to appropriate parent or child process
 * Connecting to gdbserver
+
+---
+
+## adblog
+
+When enabled, "adb logcat" output is redirected to the gdb terminal when the program is running. When the program is stopped or exited, redirection stops as well. Any log entry during the stopped interval is skipped.
+
+Currently, only Fennec log messages are redirected (i.e. messages with tags fennec or Gecko).
+
+Logs are outputted with cyclic colors, to easily distinguish between identical logs.
+
+#### Configuration
+
+    gdb> set adb-redirect-logcat on|off
+
+Enable or disable log redirection
+
+#### Customization
+
+Each log entry is passed to a log filter function, and output from the log filter function is written to the terminal. The log filter function has the form:
+
+    def filter_name(entry):
+        ...
+        return output
+
+    entry     namedtuple containing information about the log entry
+              valid members are 'date', 'time', 'pid', 'tid',
+              'priority', 'tag', and 'text'.
+              See 'adb logcat -v long' for format of each field.
+    output    string object that is written to the terminal
+
