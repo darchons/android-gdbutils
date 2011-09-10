@@ -75,3 +75,5 @@ Each log entry is passed to a log filter function, and output from the log filte
               See 'adb logcat -v long' for format of each field.
     output    string object that is written to the terminal
 
+The default filter function has the name adblog.default_filter. To assign a different filter function set adblog.log_filter to the custom function. The custom function can optionally call adblog.default_filter to perform default processing.
+
