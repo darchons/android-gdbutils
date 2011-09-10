@@ -54,6 +54,27 @@ def default_filter(entry):
 log_color = 1
 log_filter = default_filter;
 
+class LogRedirect(gdb.Parameter):
+    '''Set whether to redirect 'adb logcat' to gdb when program is running'''
+    set_doc = 'Enable or disable redirecting "adb logcat"'
+    show_doc = 'Show current "adb logcat" redirection setting'
+
+    def __init__(self):
+        super(LogRedirect, self).__init__('adb-redirect-logcat',
+                gdb.COMMAND_SUPPORT, gdb.PARAM_BOOLEAN)
+        self.value = True
+        self.get_set_string()
+
+    def get_set_string(self):
+        return 'Set to ' + ('' if self.value else 'not ') + \
+                'redirect "adb logcat" output'
+
+    def get_show_string(self, svalue):
+        return 'Currently ' + ('' if self.value else 'not ') + \
+                'redirecting "adb logcat" output'
+
+log_redirect = LogRedirect()
+
 class ADBLog(threading.Thread):
 
     def _parseLog(self, logFile):
@@ -117,6 +138,9 @@ class ADBLog(threading.Thread):
 
 def cont_handler(event):
     if not isinstance(event, gdb.ContinueEvent):
+        return
+    if not bool(gdb.parameter('adb-redirect-logcat')):
+        exit_handler(event)
         return
     global adblog, log_width
     if not adblog:
