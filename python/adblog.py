@@ -97,7 +97,8 @@ class ADBLog(threading.Thread):
     def __init__(self):
         super(ADBLog, self).__init__()
         logcatArgs = ['-v', 'long',
-                'Gecko:V', 'GeckoChildLoad:V', 'GeckoFonts:V',
+                'Gecko:V', 'GeckoApp:V', 'GeckoAppJava:V',
+                'GeckoSurfaceView:V', 'GeckoChildLoad:V', 'GeckoFonts:V',
                 'GeckoMapFile:V', 'GeckoLibLoad:V', 'fennec:V', '*:S']
 
         logCount = 0
