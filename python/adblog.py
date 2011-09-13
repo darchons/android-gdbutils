@@ -80,14 +80,20 @@ class ADBLog(threading.Thread):
     def _parseLog(self, logFile):
         line = ''
         while not line.startswith('['):
-            line = logFile.next()
+            line = logFile.readline()
+            if not line:
+                raise StopIteration()
         # line == '[ DAY TIME PID:TID PRIO/TAG ]'
         items = line.strip('[] \t\r\n').split()
         text = []
-        line = logFile.next().strip()
-        while line:
+        while True:
+            line = logFile.readline()
+            if not line:
+                raise StopIteration()
+            line = line.strip()
+            if not line:
+                break
             text.append(line)
-            line = logFile.next().strip()
         pidtid = items[2].partition(':')
         priotag = items[3].partition('/')
         return ADBLogEntry(items[0], items[1],
@@ -95,7 +101,9 @@ class ADBLog(threading.Thread):
                 priotag[0], priotag[2], '\\\\'.join(text));
 
     def __init__(self):
-        super(ADBLog, self).__init__()
+        super(ADBLog, self).__init__(name='ADBLog')
+        self.daemon = True
+
         logcatArgs = ['-v', 'long',
                 'Gecko:V', 'GeckoApp:V', 'GeckoAppJava:V',
                 'GeckoSurfaceView:V', 'GeckoChildLoad:V', 'GeckoFonts:V',
@@ -109,14 +117,12 @@ class ADBLog(threading.Thread):
                 logCount += 1
         except StopIteration:
             pass
+        self.skipCount = logCount
 
         def adblogPreExec():
             os.setpgrp()
         self.logcat = adb.call(['logcat'] + logcatArgs,
-                async=True, preexec_fn=adblogPreExec)
-        while logCount:
-            self._parseLog(self.logcat.stdout)
-            logCount -= 1
+                stdin=None, async=True, preexec_fn=adblogPreExec)
 
         self.running = False
 
@@ -125,6 +131,9 @@ class ADBLog(threading.Thread):
             global log_filter
             while self.logcat.poll() == None:
                 entry = self._parseLog(self.logcat.stdout)
+                if self.skipCount:
+                    self.skipCount -= 1
+                    continue
                 if not self.running:
                     continue
                 log = log_filter(entry)
