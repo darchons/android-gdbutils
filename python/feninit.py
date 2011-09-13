@@ -340,8 +340,11 @@ class FenInit(gdb.Command):
             def gdbserverWait():
                 obj.gdbserverOut = proc.communicate();
             return gdbserverWait;
-        threading.Thread(
-                target = makeGdbserverWait(self, gdbserverProc)).start()
+        gdbserverThd = threading.Thread(
+                name = 'GDBServer',
+                target = makeGdbserverWait(self, gdbserverProc))
+        gdbserverThd.daemon = True
+        gdbserverThd.start()
 
         # forward the port that gdbserver gave us
         adb.forward('tcp:' + port, 'tcp:' + port)
