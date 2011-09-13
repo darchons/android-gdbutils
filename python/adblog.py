@@ -92,7 +92,7 @@ class ADBLog(threading.Thread):
         priotag = items[3].partition('/')
         return ADBLogEntry(items[0], items[1],
                 pidtid[0], pidtid[2],
-                priotag[0], priotag[2], '\n'.join(text));
+                priotag[0], priotag[2], '\\\\'.join(text));
 
     def __init__(self):
         super(ADBLog, self).__init__()
