@@ -54,4 +54,5 @@ python import feninit, tracebt, fastload
 #python feninit.default.srcroot = '~/mozilla'
 
 feninit
+fastload
 
