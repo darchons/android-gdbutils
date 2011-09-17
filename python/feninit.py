@@ -145,21 +145,25 @@ class FenInit(gdb.Command):
         self.bindir = os.path.abspath(
                 os.path.join(datadir, os.pardir, 'bin'))
 
-        sys.stdout.write('Pulling libraries to %s... ' % libdir)
-        sys.stdout.flush()
-        for lib in DEFAULT_LIBS:
-            try:
-                dstpath = os.path.join(libdir, lib)
-                if not os.path.exists(dstpath):
-                    adb.pull('/system/' + lib, dstpath)
-            except gdb.GdbError:
-                sys.stdout.write('\n cannot pull %s... ' % lib)
-                sys.stdout.flush()
-        print 'Done'
+        # only pull libs if automatically loading symbols
+        if bool(gdb.parameter('auto-solib-add')):
+            sys.stdout.write('Pulling libraries to %s... ' % libdir)
+            sys.stdout.flush()
+            for lib in DEFAULT_LIBS:
+                try:
+                    dstpath = os.path.join(libdir, lib)
+                    if not os.path.exists(dstpath):
+                        adb.pull('/system/' + lib, dstpath)
+                except gdb.GdbError:
+                    sys.stdout.write('\n cannot pull %s... ' % lib)
+                    sys.stdout.flush()
+            print 'Done'
         gdb.execute('set solib-absolute-prefix ' + libdir, False, True)
         print 'Set solib-absolute-prefix to "%s".' % libdir
 
-        searchPaths = [os.path.join(libdir, d) for d in DEFAULT_SEARCH_PATHS]
+        # only add search path if automatically loading symbols
+        searchPaths = [os.path.join(libdir, d) for d in DEFAULT_SEARCH_PATHS] \
+                if bool(gdb.parameter('auto-solib-add')) else []
         if self.objdir:
             searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
             searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
@@ -340,8 +344,11 @@ class FenInit(gdb.Command):
             def gdbserverWait():
                 obj.gdbserverOut = proc.communicate();
             return gdbserverWait;
-        threading.Thread(
-                target = makeGdbserverWait(self, gdbserverProc)).start()
+        gdbserverThd = threading.Thread(
+                name = 'GDBServer',
+                target = makeGdbserverWait(self, gdbserverProc))
+        gdbserverThd.daemon = True
+        gdbserverThd.start()
 
         # forward the port that gdbserver gave us
         adb.forward('tcp:' + port, 'tcp:' + port)
