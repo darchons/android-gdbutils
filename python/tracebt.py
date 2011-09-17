@@ -37,13 +37,27 @@
 
 import gdb, re, logging, os
 
+class LogLimiter:
+    def __init__(self):
+        self.count = 0
+    def filter(self, record):
+        if record.levelno >= logging.WARNING:
+            self.count += 1
+            if self.count > 20:
+                raise gdb.GdbError('Stopped: too many warnings.')
+        return True
+    def reset(self):
+        self.count = 0
+
 def _initLogger(log):
     handler = logging.StreamHandler()
     handler.setFormatter(logging.Formatter('%(levelname)s:%(message)s'))
     log.addHandler(handler)
     log.setLevel(logging.WARNING)
+    log.addFilter(logLimiter)
 
 log = logging.getLogger(__name__)
+logLimiter = LogLimiter()
 _initLogger(log)
 
 class Frame:
@@ -351,6 +365,7 @@ class TraceBT(gdb.Command):
                 f = newf
                 newf = f.unwind()
                 fid += 1
+                logLimiter.reset()
         except KeyboardInterrupt:
             raise gdb.GdbError("interrupted")
         print 'no more reachable frames'
