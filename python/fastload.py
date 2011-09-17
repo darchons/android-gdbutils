@@ -35,16 +35,28 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb
+import gdb, threading
 
-class FastLoader(threading.Thread):
+class FastLoad(gdb.Command):
+    '''Load librariess intelligently'''
 
-    def run(self):
-        pass
+    def __init__(self):
+        super(FastLoad, self).__init__('fastload', gdb.COMMAND_SUPPORT)
 
-    def stop_handler(self, event):
-        pass
+    def complete(self, text, word):
+        return gdb.COMPLETE_NONE
 
-default = FastLoader()
-gdb.events.stop.connect(default.stop_handler)
+    class Loader(threading.Thread):
+        def run(self):
+            pass
+
+    def invoke(self, argument, from_tty):
+        if hasattr(self, 'loader') and self.loader:
+            print 'Already started fastload.'
+            return
+        self.loader = FastLoad.Loader()
+        self.loader.daemon = True
+        self.loader.start()
+
+default = FastLoad()
 
