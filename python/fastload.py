@@ -54,9 +54,14 @@ class FastLoad(gdb.Command):
         if hasattr(self, 'loader') and self.loader:
             print 'Already started fastload.'
             return
-        self.loader = FastLoad.Loader()
-        self.loader.daemon = True
-        self.loader.start()
+        self.dont_repeat()
+        # load modules
+        self._solibs = gdb.execute('info sharedlibrary', False, True)
+        self._loader = FastLoad.Loader()
+        self._loader.daemon = True
+        self._loader.start()
 
 default = FastLoad()
+# don't load libs automatically
+gdb.execute('set auto-solib-add off', False, True)
 
