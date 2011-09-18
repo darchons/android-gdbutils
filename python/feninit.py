@@ -145,7 +145,7 @@ class FenInit(gdb.Command):
         self.bindir = os.path.abspath(
                 os.path.join(datadir, os.pardir, 'bin'))
 
-        # only pull libs if automatically loading symbols
+        # only pull libs and set paths if automatically loading symbols
         if bool(gdb.parameter('auto-solib-add')):
             sys.stdout.write('Pulling libraries to %s... ' % libdir)
             sys.stdout.flush()
@@ -158,18 +158,18 @@ class FenInit(gdb.Command):
                     sys.stdout.write('\n cannot pull %s... ' % lib)
                     sys.stdout.flush()
             print 'Done'
-        gdb.execute('set solib-absolute-prefix ' + libdir, False, True)
-        print 'Set solib-absolute-prefix to "%s".' % libdir
+            gdb.execute('set solib-absolute-prefix ' + libdir, False, True)
+            print 'Set solib-absolute-prefix to "%s".' % libdir
 
-        # only add search path if automatically loading symbols
-        searchPaths = [os.path.join(libdir, d) for d in DEFAULT_SEARCH_PATHS] \
-                if bool(gdb.parameter('auto-solib-add')) else []
-        if self.objdir:
-            searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
-            searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
-        gdb.execute('set solib-search-path ' +
-                os.pathsep.join(searchPaths), False, True)
-        print 'Updated solib-search-path.'
+
+            searchPaths = [os.path.join(libdir, d) \
+                    for d in DEFAULT_SEARCH_PATHS]
+            if self.objdir:
+                searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
+                searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
+            gdb.execute('set solib-search-path ' +
+                    os.pathsep.join(searchPaths), False, True)
+            print 'Updated solib-search-path.'
 
     def _getPackageName(self):
         if self.objdir:
