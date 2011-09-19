@@ -221,28 +221,32 @@ class FenInit(gdb.Command):
         else:
             CHILD_FILE_PATH = None
 
-        # launch
         pkg = self._getPackageName()
-        sys.stdout.write('Launching %s... ' % pkg)
-        sys.stdout.flush()
-        out = adb.call(['shell', 'am', 'start',
-                '-a', 'org.mozilla.gecko.DEBUG', '-n', pkg + '/.App'])
-        if 'error' in out.lower():
-            print ''
-            print out
-            raise gdb.GdbError('Error while launching %s.' % pkg)
+        ps = adb.call(['shell', 'ps']).splitlines()
+        # get parent/child processes that are waiting ('S' state)
+        pkgProcs = [x for x in ps if pkg in x]
 
-        # FIXME sleep for 1s to allow time to launch
-        time.sleep(1)
+        if all([CHILD_EXECUTABLE in x for x in pkgProcs]):
+            # launch
+            sys.stdout.write('Launching %s... ' % pkg)
+            sys.stdout.flush()
+            out = adb.call(['shell', 'am', 'start',
+                    '-a', 'org.mozilla.gecko.DEBUG', '-n', pkg + '/.App'])
+            if 'error' in out.lower():
+                print ''
+                print out
+                raise gdb.GdbError('Error while launching %s.' % pkg)
 
-        # wait for launch to complete
-        pkgProcs = []
-        while not [True for x in pkgProcs if CHILD_EXECUTABLE not in x]:
-            ps = adb.call(['shell', 'ps']).splitlines()
-            # get parent/child processes that are waiting ('S' state)
-            pkgProcs = [x for x in ps if pkg in x and
-                    ('S' in x.split() or 'T' in x.split())]
-        print 'Done'
+            # FIXME sleep for 1s to allow time to launch
+            time.sleep(1)
+
+            # wait for parent launch to complete
+            while all([CHILD_EXECUTABLE in x for x in pkgProcs]):
+                ps = adb.call(['shell', 'ps']).splitlines()
+                # get parent/child processes that are waiting ('S' state)
+                pkgProcs = [x for x in ps if pkg in x and
+                        ('S' in x.split() or 'T' in x.split())]
+            print 'Done'
 
         # get parent/child(ren) pid's
         pidParent = next((x.split()[1]
