@@ -130,12 +130,12 @@ class FenInit(gdb.Command):
         self.objdir = objdir
 
     def _pullLibsAndSetPaths(self):
+        DEFAULT_FILE = 'system/bin/app_process'
         # libraries/binaries to pull from device
         DEFAULT_LIBS = ['system/lib/libdl.so', 'system/lib/libc.so',
                 'system/lib/libm.so', 'system/lib/libstdc++.so',
                 'system/lib/liblog.so', 'system/lib/libz.so',
-                'system/lib/libGLESv2.so', 'system/bin/linker',
-                'system/bin/app_process']
+                'system/lib/libGLESv2.so', 'system/bin/linker']
         # search path for above libraries/binaries
         DEFAULT_SEARCH_PATHS = ['system/lib', 'system/bin']
 
@@ -146,6 +146,11 @@ class FenInit(gdb.Command):
         self.libdir = libdir
         self.bindir = os.path.abspath(
                 os.path.join(datadir, os.pardir, 'bin'))
+
+        # always pull the executable file
+        dstpath = os.path.join(libdir, DEFAULT_FILE.replace('/', os.sep))
+        if not os.path.exists(dstpath):
+            adb.pull('/' + DEFAULT_FILE, dstpath)
 
         # only pull libs and set paths if automatically loading symbols
         if bool(gdb.parameter('auto-solib-add')):
