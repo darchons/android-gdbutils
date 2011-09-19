@@ -131,11 +131,13 @@ class FenInit(gdb.Command):
 
     def _pullLibsAndSetPaths(self):
         # libraries/binaries to pull from device
-        DEFAULT_LIBS = ['lib/libdl.so', 'lib/libc.so', 'lib/libm.so',
-                'lib/libstdc++.so', 'lib/liblog.so', 'lib/libz.so',
-                'lib/libGLESv2.so', 'bin/linker', 'bin/app_process']
+        DEFAULT_LIBS = ['system/lib/libdl.so', 'system/lib/libc.so',
+                'system/lib/libm.so', 'system/lib/libstdc++.so',
+                'system/lib/liblog.so', 'system/lib/libz.so',
+                'system/lib/libGLESv2.so', 'system/bin/linker',
+                'system/bin/app_process']
         # search path for above libraries/binaries
-        DEFAULT_SEARCH_PATHS = ['lib', 'bin']
+        DEFAULT_SEARCH_PATHS = ['system/lib', 'system/bin']
 
         datadir = str(gdb.parameter('data-directory'))
         libdir = os.path.abspath(
@@ -151,16 +153,15 @@ class FenInit(gdb.Command):
             sys.stdout.flush()
             for lib in DEFAULT_LIBS:
                 try:
-                    dstpath = os.path.join(libdir, lib)
+                    dstpath = os.path.join(libdir, lib.replace('/', os.sep))
                     if not os.path.exists(dstpath):
-                        adb.pull('/system/' + lib, dstpath)
+                        adb.pull('/' + lib, dstpath)
                 except gdb.GdbError:
                     sys.stdout.write('\n cannot pull %s... ' % lib)
                     sys.stdout.flush()
             print 'Done'
-            gdb.execute('set solib-absolute-prefix ' + libdir, False, True)
-            print 'Set solib-absolute-prefix to "%s".' % libdir
-
+            gdb.execute('set sysroot ' + libdir, False, True)
+            print 'Set sysroot to "%s".' % libdir
 
             searchPaths = [os.path.join(libdir, d) \
                     for d in DEFAULT_SEARCH_PATHS]
@@ -206,7 +207,8 @@ class FenInit(gdb.Command):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
         # 'file' command argument for parent process
-        PARENT_FILE_PATH = os.path.join(self.libdir, 'bin', 'app_process')
+        PARENT_FILE_PATH = os.path.join(self.libdir,
+                'system', 'bin', 'app_process')
         # 'file' command argument for child process
         if self.objdir:
             CHILD_FILE_PATH = os.path.join(self.objdir,
