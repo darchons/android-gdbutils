@@ -130,12 +130,14 @@ class FenInit(gdb.Command):
         self.objdir = objdir
 
     def _pullLibsAndSetPaths(self):
+        DEFAULT_FILE = 'system/bin/app_process'
         # libraries/binaries to pull from device
-        DEFAULT_LIBS = ['lib/libdl.so', 'lib/libc.so', 'lib/libm.so',
-                'lib/libstdc++.so', 'lib/liblog.so', 'lib/libz.so',
-                'lib/libGLESv2.so', 'bin/linker', 'bin/app_process']
+        DEFAULT_LIBS = ['system/lib/libdl.so', 'system/lib/libc.so',
+                'system/lib/libm.so', 'system/lib/libstdc++.so',
+                'system/lib/liblog.so', 'system/lib/libz.so',
+                'system/lib/libGLESv2.so', 'system/bin/linker']
         # search path for above libraries/binaries
-        DEFAULT_SEARCH_PATHS = ['lib', 'bin']
+        DEFAULT_SEARCH_PATHS = ['system/lib', 'system/bin']
 
         datadir = str(gdb.parameter('data-directory'))
         libdir = os.path.abspath(
@@ -145,31 +147,35 @@ class FenInit(gdb.Command):
         self.bindir = os.path.abspath(
                 os.path.join(datadir, os.pardir, 'bin'))
 
-        # only pull libs if automatically loading symbols
+        # always pull the executable file
+        dstpath = os.path.join(libdir, DEFAULT_FILE.replace('/', os.sep))
+        if not os.path.exists(dstpath):
+            adb.pull('/' + DEFAULT_FILE, dstpath)
+
+        # only pull libs and set paths if automatically loading symbols
         if bool(gdb.parameter('auto-solib-add')):
             sys.stdout.write('Pulling libraries to %s... ' % libdir)
             sys.stdout.flush()
             for lib in DEFAULT_LIBS:
                 try:
-                    dstpath = os.path.join(libdir, lib)
+                    dstpath = os.path.join(libdir, lib.replace('/', os.sep))
                     if not os.path.exists(dstpath):
-                        adb.pull('/system/' + lib, dstpath)
+                        adb.pull('/' + lib, dstpath)
                 except gdb.GdbError:
                     sys.stdout.write('\n cannot pull %s... ' % lib)
                     sys.stdout.flush()
             print 'Done'
-        gdb.execute('set solib-absolute-prefix ' + libdir, False, True)
-        print 'Set solib-absolute-prefix to "%s".' % libdir
+            gdb.execute('set sysroot ' + libdir, False, True)
+            print 'Set sysroot to "%s".' % libdir
 
-        # only add search path if automatically loading symbols
-        searchPaths = [os.path.join(libdir, d) for d in DEFAULT_SEARCH_PATHS] \
-                if bool(gdb.parameter('auto-solib-add')) else []
-        if self.objdir:
-            searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
-            searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
-        gdb.execute('set solib-search-path ' +
-                os.pathsep.join(searchPaths), False, True)
-        print 'Updated solib-search-path.'
+            searchPaths = [os.path.join(libdir, d) \
+                    for d in DEFAULT_SEARCH_PATHS]
+            if self.objdir:
+                searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
+                searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
+            gdb.execute('set solib-search-path ' +
+                    os.pathsep.join(searchPaths), False, True)
+            print 'Updated solib-search-path.'
 
     def _getPackageName(self):
         if self.objdir:
@@ -206,7 +212,8 @@ class FenInit(gdb.Command):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
         # 'file' command argument for parent process
-        PARENT_FILE_PATH = os.path.join(self.libdir, 'bin', 'app_process')
+        PARENT_FILE_PATH = os.path.join(self.libdir,
+                'system', 'bin', 'app_process')
         # 'file' command argument for child process
         if self.objdir:
             CHILD_FILE_PATH = os.path.join(self.objdir,
@@ -214,28 +221,32 @@ class FenInit(gdb.Command):
         else:
             CHILD_FILE_PATH = None
 
-        # launch
         pkg = self._getPackageName()
-        sys.stdout.write('Launching %s... ' % pkg)
-        sys.stdout.flush()
-        out = adb.call(['shell', 'am', 'start',
-                '-a', 'org.mozilla.gecko.DEBUG', '-n', pkg + '/.App'])
-        if 'error' in out.lower():
-            print ''
-            print out
-            raise gdb.GdbError('Error while launching %s.' % pkg)
+        ps = adb.call(['shell', 'ps']).splitlines()
+        # get parent/child processes that are waiting ('S' state)
+        pkgProcs = [x for x in ps if pkg in x]
 
-        # FIXME sleep for 1s to allow time to launch
-        time.sleep(1)
+        if all([CHILD_EXECUTABLE in x for x in pkgProcs]):
+            # launch
+            sys.stdout.write('Launching %s... ' % pkg)
+            sys.stdout.flush()
+            out = adb.call(['shell', 'am', 'start',
+                    '-a', 'org.mozilla.gecko.DEBUG', '-n', pkg + '/.App'])
+            if 'error' in out.lower():
+                print ''
+                print out
+                raise gdb.GdbError('Error while launching %s.' % pkg)
 
-        # wait for launch to complete
-        pkgProcs = []
-        while not [True for x in pkgProcs if CHILD_EXECUTABLE not in x]:
-            ps = adb.call(['shell', 'ps']).splitlines()
-            # get parent/child processes that are waiting ('S' state)
-            pkgProcs = [x for x in ps if pkg in x and
-                    ('S' in x.split() or 'T' in x.split())]
-        print 'Done'
+            # FIXME sleep for 1s to allow time to launch
+            time.sleep(1)
+
+            # wait for parent launch to complete
+            while all([CHILD_EXECUTABLE in x for x in pkgProcs]):
+                ps = adb.call(['shell', 'ps']).splitlines()
+                # get parent/child processes that are waiting ('S' state)
+                pkgProcs = [x for x in ps if pkg in x and
+                        ('S' in x.split() or 'T' in x.split())]
+            print 'Done'
 
         # get parent/child(ren) pid's
         pidParent = next((x.split()[1]
