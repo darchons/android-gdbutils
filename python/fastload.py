@@ -35,21 +35,64 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, threading, os, sys, adb, feninit
+import gdb, threading, os, sys, subprocess, feninit
 
-class FastLoad():
-    '''Load librariess intelligently'''
+class FastLoad(gdb.Command):
+    '''Pull libraries in background'''
 
     def __init__(self):
+        super(FastLoad, self).__init__('fastload', gdb.COMMAND_SUPPORT)
+        self._loader = None
+
+    def complete(self, text, word):
+        return gdb.COMPLETE_NONE
+
+    def invoke(self, argument, from_tty):
+        if self._loader:
+            return
+        libdir = feninit.default.libdir \
+                if hasattr(feninit.default, 'libdir') else None
+        if not libdir or os.path.exists(os.path.join(
+                libdir, 'system', 'lib', 'libdvm.so')):
+            return
         self._loader = FastLoad.Loader()
-        self._loader.solibs = None
+        self._loader.solibs = gdb.execute('info sharedlibrary', False, True)
         gdb.events.cont.connect(self.cont_handler)
         gdb.events.stop.connect(self.stop_handler)
-        def loadLibList():
-            if not self._loader.solibs:
-                self._loader.solibs = \
-                        gdb.execute('info sharedlibrary', False, True)
-        gdb.post_event(loadLibList)
+        gdb.events.exited.connect(self.exit_handler)
+        # load modules
+        self._loader.continuing = False
+        self._loader.adbcmd = str(gdb.parameter('adb-path'))
+        self._loader.adbdev = str(gdb.parameter('adb-device'))
+        self._loader.start()
+
+    def cont_handler(self, event):
+        if not isinstance(event, gdb.ContinueEvent):
+            return
+        self._loader.continuing = True
+
+    def stop_handler(self, event):
+        loader = self._loader
+        self.exit_handler(event)
+        # set paths and load all symbols
+        if not loader.hasLibs:
+            return
+        sys.__stdout__.write('Loading symbols... ')
+        sys.__stdout__.flush()
+        gdb.execute('sharedlibrary', False, True)
+        print 'Done'
+
+    def exit_handler(self, event):
+        gdb.events.cont.disconnect(self.cont_handler)
+        gdb.events.stop.disconnect(self.stop_handler)
+        gdb.events.exited.disconnect(self.exit_handler)
+        if self._loader.isAlive():
+            self._loader.continuing = False
+            sys.__stdout__.write('Waiting for libraries from device... ')
+            sys.__stdout__.flush()
+            self._loader.join()
+            print 'Done'
+        self._loader = None
 
     class Loader(threading.Thread):
         def run(self):
@@ -60,12 +103,8 @@ class FastLoad():
                     if hasattr(feninit.default, 'objdir') else None
             buckets = [[] for x in range(PARALLEL_LIMIT)]
 
-            self.paths = set()
-            if objdir:
-                self.paths.add(os.path.join(objdir, 'dist', 'bin'))
-
             for lib in (x.split()[-1] for x in self.solibs.splitlines()
-                    if '.so' in x and len(x.split()) == 2):
+                    if ('.so' in x or '/' in x) and len(x.split()) == 2):
                 if objdir and os.path.exists(
                         os.path.join(objdir, 'dist', 'bin', lib)):
                     continue
@@ -77,59 +116,38 @@ class FastLoad():
                     dst = os.path.join(libdir, 'system', 'lib', lib)
                 if os.path.exists(dst):
                     continue
-                self.paths.add(os.path.dirname(dst))
                 bucket = min(buckets, key=lambda x: len(x))
                 bucket.append((src, dst))
 
+            self.hasLibs = any(buckets)
+            if not self.hasLibs:
+                return
+
             # let it loose!
-            def makePullLibs(bucket):
+            def makePullLibs(bucket, fnull):
                 def doPullLibs():
                     for fromto in bucket:
-                        try:
-                            if self.continuing:
-                                sys.__stderr__.write(
-                                        'Background-loading %s.\n' % fromto[0])
-                            adb.pull(fromto[0], fromto[1])
-                        except gdb.GdbError:
-                            pass
+                        if self.continuing:
+                            sys.__stderr__.write(
+                                    'Background-loading %s.\n' % fromto[0])
+                        cmd = [self.adbcmd]
+                        cmd += ['-s', self.adbdev] if self.adbdev else []
+                        cmd += ['pull', fromto[0], fromto[1]]
+                        subprocess.Popen(cmd, stdout=fnull,
+                                stderr=fnull).wait()
                 return doPullLibs
-            threads = [threading.Thread(target=makePullLibs(x))
-                    for x in buckets]
+            fnull = open(os.devnull, 'wb')
+            threads = [threading.Thread(
+                    target=makePullLibs(x, fnull)) for x in buckets]
             for thread in threads:
-                thread.daemon = True
                 thread.start()
             for thread in threads:
                 thread.join()
-            print 'All libraries pulled from device. Continuing.'
-
-    def cont_handler(self, event):
-        if not isinstance(event, gdb.ContinueEvent):
-            return
-        # load modules
-        self._loader.continuing = True
-        self._loader.daemon = True
-        self._loader.start()
-
-    def stop_handler(self, event):
-        if self._loader.isAlive():
-            self._loader.continuing = False
-            sys.stdout.write('Waiting for libraries from device... ')
-            sys.stdout.flush()
-            self._loader.join()
-            print 'Done'
-        # set paths
-        sys.stdout.write('Loading symbols... ')
-        sys.stdout.flush()
-        libdir = feninit.default.libdir
-        gdb.execute('set sysroot ' + libdir, False, True)
-        gdb.execute('set solib-search-path ' +
-                os.pathsep.join(self._loader.paths), False, True)
-        # load all symbols
-        gdb.execute('sharedlibrary', False, True)
-        print 'Done'
+            fnull.close()
+            if self.continuing:
+                sys.__stderr__.write(
+                        'All libraries pulled from device. Continuing.\n')
 
 default = FastLoad()
-
-# don't load libs automatically
-gdb.execute('set auto-solib-add off', False, True)
+feninit.default.skipPull = True
 
