@@ -153,7 +153,7 @@ class FenInit(gdb.Command):
             adb.pull('/' + DEFAULT_FILE, dstpath)
 
         # only pull libs and set paths if automatically loading symbols
-        if bool(gdb.parameter('auto-solib-add')):
+        if hasattr(self, 'skipPull') and not self.skipPull:
             sys.stdout.write('Pulling libraries to %s... ' % libdir)
             sys.stdout.flush()
             for lib in DEFAULT_LIBS:
@@ -165,17 +165,18 @@ class FenInit(gdb.Command):
                     sys.stdout.write('\n cannot pull %s... ' % lib)
                     sys.stdout.flush()
             print 'Done'
-            gdb.execute('set sysroot ' + libdir, False, True)
-            print 'Set sysroot to "%s".' % libdir
 
-            searchPaths = [os.path.join(libdir, d) \
-                    for d in DEFAULT_SEARCH_PATHS]
-            if self.objdir:
-                searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
-                searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
-            gdb.execute('set solib-search-path ' +
-                    os.pathsep.join(searchPaths), False, True)
-            print 'Updated solib-search-path.'
+        gdb.execute('set sysroot ' + libdir, False, True)
+        print 'Set sysroot to "%s".' % libdir
+
+        searchPaths = [os.path.join(libdir, d) \
+                for d in DEFAULT_SEARCH_PATHS]
+        if self.objdir:
+            searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
+            searchPaths.append(os.path.join(self.objdir, 'dist', 'lib'))
+        gdb.execute('set solib-search-path ' +
+                os.pathsep.join(searchPaths), False, True)
+        print 'Updated solib-search-path.'
 
     def _getPackageName(self):
         if self.objdir:
