@@ -235,9 +235,9 @@ class FenInit(gdb.Command):
         print 'Done'
 
         # get parent/child(ren) pid's
-        pidParent = next((x.split()[1]
+        pidParent = next((x.split()[0]
                 for x in pkgProcs if CHILD_EXECUTABLE not in x))
-        pidChild = [x.split()[1]
+        pidChild = [x.split()[0]
                 for x in pkgProcs if CHILD_EXECUTABLE in x]
         pidChildParent = pidParent
 
