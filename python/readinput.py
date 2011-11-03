@@ -43,7 +43,7 @@ readline.set_completer()
 
 if __name__ == '__main__': # not module
 
-    import argparse
+    from optparse import OptionParser
 
     def dirComplete(text, state):
         path = readline.get_line_buffer()
@@ -63,11 +63,11 @@ if __name__ == '__main__': # not module
         results = [x for x in lst if x.lower().startswith(buf)] + [None]
         return results[state]
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-p')
-    parser.add_argument('-l')
-    parser.add_argument('-d', action='store_true')
-    args = parser.parse_args()
+    parser = OptionParser()
+    parser.add_option('-p', dest='p')
+    parser.add_option('-l', dest='l')
+    parser.add_option('-d', action='store_true', dest='d')
+    (args, extras) = parser.parse_args()
 
     if hasattr(args, 'l') and args.l:
         lst = eval(args.l)
