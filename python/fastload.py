@@ -111,13 +111,18 @@ class FastLoad(gdb.Command):
                 if '/' in lib:
                     src = lib
                     dst = os.path.join(libdir, lib.lstrip('/'))
-                else:
-                    src = '/system/lib/' + lib
-                    dst = os.path.join(libdir, 'system', 'lib', lib)
-                if os.path.exists(dst):
+                    if os.path.exists(dst):
+                        continue
+                    bucket = min(buckets, key=lambda x: len(x))
+                    bucket.append((src, dst))
                     continue
-                bucket = min(buckets, key=lambda x: len(x))
-                bucket.append((src, dst))
+                for srclibdir in ['', 'hw/', 'egl/']:
+                    src = '/system/lib/' + srclibdir + lib
+                    dst = os.path.join(libdir, 'system', 'lib', lib)
+                    if os.path.exists(dst):
+                        continue
+                    bucket = min(buckets, key=lambda x: len(x))
+                    bucket.append((src, dst))
 
             self.hasLibs = any(buckets)
             if not self.hasLibs:
