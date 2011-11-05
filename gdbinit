@@ -58,6 +58,9 @@ python import feninit, tracebt, adblog
 # Disable logcat redirection
 #set adb-log-redirect off
 
+# Set logcat color scheme
+#set adb-log-color [order|priority|thread]
+
 
 feninit
 

@@ -41,18 +41,52 @@ ADBLogEntry = collections.namedtuple('ADBLogEntry',
         ['date', 'time', 'pid', 'tid', 'priority', 'tag', 'text']);
 
 def default_filter(entry):
-    global log_width, log_color
+    global log_width, log_colorfn
     if not hasattr(feninit.default, 'pid') or \
             entry.pid == feninit.default.pid:
-        log_color = log_color + 1 if log_color <= 5 else 2
         text = entry.text
         if log_width > 8 and len(text) + 5 > log_width:
             text = text[0: log_width - 8] + '...'
-        return 'adb| \x1B[3' + str(log_color) + 'm' + text + '\x1B[39m\n'
+        return 'adb| \x1B[3' + str(log_colorfn(entry)) + 'm' + \
+                text + '\x1B[39m\n'
     return None
 
-log_color = 1
-log_filter = default_filter;
+def _getColorFn(color):
+    PRIORITY_MAP = {'F': 1, 'E': 1, 'W': 3, 'I': 2, 'D': 6, 'V': 4}
+    lastColor = [1]
+    def orderColorFn(entry):
+        lastColor[0] = lastColor[0] + 1 if lastColor[0] <= 5 else 2
+        return lastColor[0]
+    def priorityColorFn(entry):
+        return PRIORITY_MAP[entry.priority] \
+                if entry.priority in PRIORITY_MAP else 5
+    def threadColorFn(entry):
+        return int(entry.tid, 0) % 5 + 2
+    return priorityColorFn if color == 'priority' else \
+            threadColorFn if color == 'thread' else orderColorFn
+
+log_colorfn = None
+log_filter = default_filter
+
+class LogColor(gdb.Parameter):
+    '''Set 'adb logcat' output coloring'''
+    set_doc = 'Set "adb logcat" output color to be based on ' + \
+            '"order", "priority", or "thread"'
+    show_doc = 'Show current "adb logcat" output color scheme'
+
+    def __init__(self):
+        super(LogColor, self).__init__('adb-log-color',
+                gdb.COMMAND_SUPPORT, gdb.PARAM_ENUM,
+                ['order', 'priority', 'thread'])
+        self.value = 'order'
+        self.get_set_string()
+
+    def get_set_string(self):
+        self.value = self.value.lower()
+        return 'Color "adb logcat" output based on ' + self.value
+
+    def get_show_string(self, svalue):
+        return 'Currently coloring "adb logcat" output based on ' + svalue
 
 class LogRedirect(gdb.Parameter):
     '''Set whether to redirect 'adb logcat' to gdb when program is running'''
@@ -73,6 +107,7 @@ class LogRedirect(gdb.Parameter):
         return 'Currently ' + ('' if self.value else 'not ') + \
                 'redirecting "adb logcat" output'
 
+log_color = LogColor()
 log_redirect = LogRedirect()
 
 class ADBLog(threading.Thread):
@@ -152,12 +187,13 @@ def cont_handler(event):
     if not bool(gdb.parameter('adb-log-redirect')):
         exit_handler(event)
         return
-    global adblog, log_width
+    global adblog, log_width, log_colorfn
     if not adblog:
         adb.chooseDevice()
         adblog = ADBLog()
         adblog.start()
     log_width = int(gdb.parameter('width'))
+    log_colorfn = _getColorFn(str(gdb.parameter('adb-log-color')))
     adblog.running = True
 
 def stop_handler(event):
