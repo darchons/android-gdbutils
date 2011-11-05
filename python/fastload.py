@@ -52,8 +52,8 @@ class FastLoad(gdb.Command):
             return
         libdir = feninit.default.libdir \
                 if hasattr(feninit.default, 'libdir') else None
-        if not libdir or os.path.exists(os.path.join(
-                libdir, 'system', 'lib', 'libdvm.so')):
+        if not libdir or (argument == 'quick' and os.path.exists(
+                os.path.join(libdir, 'system', 'lib', 'libdvm.so'))):
             return
         self._loader = FastLoad.Loader()
         self._loader.solibs = gdb.execute('info sharedlibrary', False, True)
