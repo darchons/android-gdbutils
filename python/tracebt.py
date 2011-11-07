@@ -36,9 +36,29 @@
 # ***** END LICENSE BLOCK *****
 
 import gdb, re, logging, os
-from logging import debug, info, warning, error, critical, exception
 
-logging.getLogger().setLevel(logging.WARNING)
+class LogLimiter:
+    def __init__(self):
+        self.count = 0
+    def filter(self, record):
+        if record.levelno >= logging.WARNING:
+            self.count += 1
+            if self.count > 20:
+                raise gdb.GdbError('Stopped: too many warnings.')
+        return True
+    def reset(self):
+        self.count = 0
+
+def _initLogger(log):
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(levelname)s:%(message)s'))
+    log.addHandler(handler)
+    log.setLevel(logging.WARNING)
+    log.addFilter(logLimiter)
+
+log = logging.getLogger(__name__)
+logLimiter = LogLimiter()
+_initLogger(log)
 
 class Frame:
 
@@ -189,7 +209,7 @@ class Frame:
 
             # trace branch instructions
             def traceBranch(is_cond):
-                info('branch (%s) to %s @ %x : %x', mnemonic, args, pc, sp)
+                log.info('branch (%s) to %s @ %x : %x', mnemonic, args, pc, sp)
                 new_pc = int(args, 0)
                 new_is_thumb = not is_thumb if mnemonic.startswith('bx') \
                                 else is_thumb
@@ -214,11 +234,12 @@ class Frame:
                 mnemonic == 'bal' or mnemonic == 'bxal':
                 if args == 'lr':
                     # FIXME lr might not be valid
-                    warning('frame (bx lr) @ %x : %x', pc, sp)
+                    log.warning('frame (bx lr) @ %x : %x', pc, sp)
                     pc = int(gdb.parse_and_eval('(unsigned)$lr'))
                     return Frame(pc, sp, (pc & 1) != 0)
                 elif args.startswith('r'):
-                    warning('skipped unconditional branch (%s %s) @ %x : %x',
+                    log.warning(
+                            'skipped unconditional branch (%s %s) @ %x : %x',
                             mnemonic, args, pc, sp)
                     continue
                 (new_block, pc, is_thumb) = traceBranch(False)
@@ -232,7 +253,7 @@ class Frame:
                 if mnemonic.startswith('cb'):
                     args = args[args.find(',') + 1 :].lstrip()
                 if args == 'lr':
-                    warning('skipped conditional bx lr @ %x : %x', pc, sp)
+                    log.warning('skipped conditional bx lr @ %x : %x', pc, sp)
                     continue
                 (new_block, pc, is_thumb) = traceBranch(True)
                 if new_block:
@@ -253,7 +274,7 @@ class Frame:
                 (mnemonic.startswith('pop') and args.find('pc') >= 0):
                 sp += 4 * len(args[args.find('{') :].split(','))
                 if args.find('pc') > 0:
-                    info('frame (pop pc) @ %x : %x', pc, sp)
+                    log.info('frame (pop pc) @ %x : %x', pc, sp)
                     args = args[args.find('pc') :]
                     pc = int(gdb.parse_and_eval('*(unsigned*)' +
                             hex(sp - 4 * len(args.split(',')))))
@@ -271,16 +292,16 @@ class Frame:
 
             elif args.startswith('pc') or ((args.find('pc') > args.find('{'))
                                     and (args.find('pc') < args.find('}'))):
-                warning('unknown instruction at %s (%s %s) affected pc',
+                log.warning('unknown instruction at %s (%s %s) affected pc',
                         hex(pc), mnemonic, args)
 
             elif args.startswith('sp') or ((args.find('sp') > args.find('{'))
                                     and (args.find('sp') < args.find('}'))):
-                warning('unknown instruction at %s (%s %s) affected sp',
+                log.warning('unknown instruction at %s (%s %s) affected sp',
                         hex(pc), mnemonic, args)
 
             elif mnemonic.startswith('pop') or mnemonic.startswith('push'):
-                warning('conditional instruction at %s (%s %s) affected sp',
+                log.warning('conditional instruction at %s (%s %s) affected sp',
                         hex(pc), mnemonic, args)
 
     def unwind(self):
@@ -344,6 +365,7 @@ class TraceBT(gdb.Command):
                 f = newf
                 newf = f.unwind()
                 fid += 1
+                logLimiter.reset()
         except KeyboardInterrupt:
             raise gdb.GdbError("interrupted")
         print 'no more reachable frames'
