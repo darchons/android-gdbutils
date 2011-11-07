@@ -49,9 +49,12 @@ python import feninit, tracebt
 #   named 'mozilla-central', 'mozilla-aurora', etc.
 # if feninit.default.srcroot is not specified,
 #   current user directory is scanned
+# if feninit.default.no_launch is True,
+#   the application will not be launched on the device (useful for B2G)
 
 #python feninit.default.objdir = '~/mozilla/central/objdir-android'
 #python feninit.default.srcroot = '~/mozilla'
+#python feninit.default.no_launch = True
 
 feninit
 
