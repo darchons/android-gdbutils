@@ -37,7 +37,7 @@
 
 # Load python utilities
 python import adbparams
-python import feninit, tracebt
+python import feninit, tracebt, fastload
 
 # Uncomment to change feninit behavior
 
@@ -57,4 +57,5 @@ python import feninit, tracebt
 #python feninit.default.no_launch = True
 
 feninit
+fastload quick
 
