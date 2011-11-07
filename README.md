@@ -61,6 +61,10 @@ Logs are outputted with cyclic colors, to easily distinguish between identical l
 
 Enable or disable log redirection
 
+    gdb> set adb-log-color order|priority|thread
+
+Color log output based on order, priority, or thread
+
 #### Customization
 
 Each log entry is passed to a log filter function, and output from the log filter function is written to the terminal. The log filter function has the form:
