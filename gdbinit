@@ -37,7 +37,8 @@
 
 # Load python utilities
 python import adbparams
-python import feninit, tracebt, fastload
+python import feninit, tracebt, fastload, adblog
+
 
 # Uncomment to change feninit behavior
 
@@ -55,6 +56,14 @@ python import feninit, tracebt, fastload
 #python feninit.default.objdir = '~/mozilla/central/objdir-android'
 #python feninit.default.srcroot = '~/mozilla'
 #python feninit.default.no_launch = True
+
+
+# Disable logcat redirection
+#set adb-log-redirect off
+
+# Set logcat color scheme
+#set adb-log-color [order|priority|thread]
+
 
 feninit
 fastload quick
