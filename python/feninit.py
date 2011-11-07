@@ -309,10 +309,9 @@ class FenInit(gdb.Command):
             sys.stdout.flush()
         self.pid = pidAttach
 
-        # push gdbserver if it's not there
+        # always push gdbserver in case there's an old version on the device
         gdbserverPath = '/data/local/tmp/gdbserver'
-        if not adb.pathExists(gdbserverPath):
-            adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
+        adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
 
         # run this after fork() and before exec(gdbserver)
         # so 'adb shell gdbserver' doesn't get gdb's signals
