@@ -198,20 +198,8 @@ class FenInit(gdb.Command):
                 'Use package (e.g. org.mozilla.fennec): ', '-l', str(pkgs))
         return pkg
 
-    def _launchAndAttach(self):
-        # name of child binary
-        CHILD_EXECUTABLE = 'plugin-container'
-        # 'file' command argument for parent process
-        PARENT_FILE_PATH = os.path.join(self.libdir, 'bin', 'app_process')
-        # 'file' command argument for child process
-        if self.objdir:
-            CHILD_FILE_PATH = os.path.join(self.objdir,
-                    'dist', 'bin', CHILD_EXECUTABLE)
-        else:
-            CHILD_FILE_PATH = None
-
+    def _launch(self, pkg):
         # launch
-        pkg = self._getPackageName()
         sys.stdout.write('Launching %s... ' % pkg)
         sys.stdout.flush()
         out = adb.call(['shell', 'am', 'start',
@@ -223,6 +211,19 @@ class FenInit(gdb.Command):
 
         # FIXME sleep for 1s to allow time to launch
         time.sleep(1)
+        pass
+
+    def _attach(self, pkg):
+        # name of child binary
+        CHILD_EXECUTABLE = 'plugin-container'
+        # 'file' command argument for parent process
+        PARENT_FILE_PATH = os.path.join(self.libdir, 'bin', 'app_process')
+        # 'file' command argument for child process
+        if self.objdir:
+            CHILD_FILE_PATH = os.path.join(self.objdir,
+                    'dist', 'bin', CHILD_EXECUTABLE)
+        else:
+            CHILD_FILE_PATH = None
 
         # wait for launch to complete
         pkgProcs = []
@@ -234,9 +235,9 @@ class FenInit(gdb.Command):
         print 'Done'
 
         # get parent/child(ren) pid's
-        pidParent = next((x.split()[1]
+        pidParent = next((next((col for col in x.split() if col.isdigit()))
                 for x in pkgProcs if CHILD_EXECUTABLE not in x))
-        pidChild = [x.split()[1]
+        pidChild = [next((col for col in x.split() if col.isdigit()))
                 for x in pkgProcs if CHILD_EXECUTABLE in x]
         pidChildParent = pidParent
 
@@ -372,7 +373,14 @@ class FenInit(gdb.Command):
             self._chooseDevice()
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
-            self._launchAndAttach()
+            
+            pkg = self._getPackageName()
+            no_launch = hasattr(self, 'no_launch') and self.no_launch
+            if not no_launch:
+                self._launch(pkg)
+                pass
+            self._attach(pkg)
+            
             self.dont_repeat()
         except:
             # if there is an error, a gdbserver might be left hanging
