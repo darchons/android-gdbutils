@@ -241,6 +241,9 @@ class FenInit(gdb.Command):
         if self.objdir:
             CHILD_FILE_PATH = os.path.join(self.objdir,
                     'dist', 'bin', CHILD_EXECUTABLE)
+            if not os.path.exists(CHILD_FILE_PATH):
+                CHILD_FILE_PATH = os.path.join(self.objdir,
+                        'dist', 'bin', 'lib', 'libplugin-container.so')
         else:
             CHILD_FILE_PATH = None
 
