@@ -330,34 +330,57 @@ class FenInit(gdb.Command):
         def gdbserverPreExec():
             os.setpgrp()
 
-        # can we run as root?
-        if 'uid=0' in adb.call(['shell', 'id']):
-            gdbserverProc = adb.call(['shell',
-                    gdbserverPath, '--attach', ':0', pidAttach],
-                    stderr=subprocess.PIPE, async=True,
+        def runGDBServer(args): # returns (proc, port, stdout)
+            proc = adb.call(args, stderr=subprocess.PIPE, async=True,
                     preexec_fn=gdbserverPreExec)
-        else:
+            # we passed ':0' to gdbserver so it'll pick a port for us
+            # but that means we have to find the port from stdout
+            # while this complicates things a little, it allows us to
+            # have multiple gdbservers running
+            out = []
+            line = ' '
+            while line:
+                line = proc.stdout.readline()
+                words = line.split()
+                out.append(line.rstrip())
+                # kind of hacky, assume the port number comes after 'port'
+                if 'port' not in words:
+                    continue
+                if words.index('port') + 1 == len(words):
+                    continue
+                port = words[words.index('port') + 1]
+                if not port.isdigit():
+                    continue
+                return (proc, port, None)
+            # not found, error?
+            return (None, None, out)
+
+        # can we run as root?
+        (gdbserverProc, port, gdbserverRootOut) = runGDBServer(
+                ['shell', gdbserverPath, '--attach', ':0', pidAttach])
+        if not gdbserverProc:
             sys.stdout.write('as non-root... ')
             sys.stdout.flush()
-            gdbserverProc = adb.call(['shell', 'run-as', pkg,
-                    gdbserverPath, '--attach', ':0', pidAttach],
-                    stderr=subprocess.PIPE, async=True,
-                    preexec_fn=gdbserverPreExec)
-
-        # we passed ':0' to gdbserver so it'll pick a port for us
-        # but that means we have to find the port from stdout
-        # while this complicates things a little, it allows us to
-        # have multiple gdbservers running
-        port = None
-        while not port:
-            if gdbserverProc.poll() is not None:
-                print ''
-                print gdbserverProc.stdout.read()
-                raise gdb.GdbError('gdbserver exited unexpectedly')
-            line = gdbserverProc.stdout.readline().split()
-            # kind of hacky, assume the port number comes after 'port'
-            if 'port' in line:
-                port = line[line.index('port') + 1]
+            (gdbserverProc, port, gdbserverRunAsOut) = runGDBServer(
+                    ['shell', 'run-as', pkg,
+                    gdbserverPath, '--attach', ':0', pidAttach])
+        if not gdbserverProc:
+            sys.stdout.write('as root... ')
+            sys.stdout.flush()
+            adb.call(['shell', 'echo',
+                    ' '.join([gdbserverPath, '--attach', ':0', pidAttach]),
+                    '>', gdbserverPath + '.run'])
+            adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
+            (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
+                    ['shell', 'su', '-c', gdbserverPath + '.run'])
+        if not gdbserverProc:
+            print '\n"gdbserver" output:'
+            print ' ' + ' '.join(gdbserverRootOut)
+            print '"run-as" output:'
+            print ' ' + ' '.join(gdbserverRunAsOut)
+            print '"su -c" output:'
+            print ' ' + ' '.join(gdbserverSuOut)
+            raise gdb.GdbError('failed to run gdbserver')
 
         self.port = port
         self.gdbserver = gdbserverProc
