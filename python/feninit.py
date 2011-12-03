@@ -268,7 +268,8 @@ class FenInit(gdb.Command):
         for proc in [x.split() for x in ps if 'gdbserver' in x]:
             # get the program being debugged by examine gdbserver cmdline
             cmdline = adb.call(['shell', 'cat',
-                    '/proc/' + proc[1] + '/cmdline']).split('\0')
+                    '/proc/' + next((col for col in proc if col.isdigit())) +
+                    '/cmdline']).split('\0')
             if '--attach' not in cmdline:
                 continue
             # this should be the pid
@@ -293,7 +294,8 @@ class FenInit(gdb.Command):
                 # check for 'S' state, for right parent, and for right child
                 pkgProcs = [x for x in ps if ('S' in x or 'T' in x) and \
                         pidChildParent in x and CHILD_EXECUTABLE in x]
-            pidChild = [x.split()[1] for x in pkgProcs]
+            pidChild = [next((col for col in x.split() if col.isdigit()))
+                    for x in pkgProcs]
 
         # if the parent was not picked, pick the right child
         if not pidParent and len(pidChild) == 1:
