@@ -362,9 +362,12 @@ class FenInit(gdb.Command):
         if not gdbserverProc:
             sys.stdout.write('as root... ')
             sys.stdout.flush()
+            adb.call(['shell', 'echo',
+                    ' '.join([gdbserverPath, '--attach', ':0', pidAttach]),
+                    '>', gdbserverPath + '.run'])
+            adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
-                    ['shell', 'su', '-c',
-                    ' '.join([gdbserverPath, '--attach', ':0', pidAttach])])
+                    ['shell', 'su', '-c', gdbserverPath + '.run'])
         if not gdbserverProc:
             print '\n"gdbserver" output:'
             print ' ' + ' '.join(gdbserverRootOut)
