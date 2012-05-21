@@ -69,6 +69,11 @@ define dump-java-stack
     call dvmDumpAllThreads(true)
 end
 
+# Add a command for dumping JNI reference tables
+define dump-jni-refs
+    call dvmDumpJniReferenceTables()
+end
+
 feninit
 fastload quick
 
