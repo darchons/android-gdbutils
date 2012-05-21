@@ -64,6 +64,15 @@ python import feninit, tracebt, fastload, adblog
 # Set logcat color scheme
 #set adb-log-color [order|priority|thread]
 
+# Add a command for dumping Java stack traces
+define dump-java-stack
+    call dvmDumpAllThreads(true)
+end
+
+# Add a command for dumping JNI reference tables
+define dump-jni-refs
+    call dvmDumpJniReferenceTables()
+end
 
 feninit
 fastload quick
