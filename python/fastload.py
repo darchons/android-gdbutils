@@ -123,6 +123,13 @@ class FastLoad(gdb.Command):
                         continue
                     bucket = min(buckets, key=lambda x: len(x))
                     bucket.append((src, dst))
+                for srclibdir in ['', 'drm/', 'egl/', 'hw/']:
+                    src = '/system/vendor/lib/' + srclibdir + lib
+                    dst = os.path.join(libdir, 'system', 'vendor', 'lib', lib)
+                    if os.path.exists(dst):
+                        continue
+                    bucket = min(buckets, key=lambda x: len(x))
+                    bucket.append((src, dst))
 
             self.hasLibs = any(buckets)
             if not self.hasLibs:
