@@ -333,8 +333,7 @@ class FenInit(gdb.Command):
         def runGDBServer(args): # returns (proc, port, stdout)
             proc = adb.call(args, stderr=subprocess.PIPE, async=True,
                     preexec_fn=gdbserverPreExec)
-            # we passed ':0' to gdbserver so it'll pick a port for us
-            # but that means we have to find the port from stdout
+            # we have to find the port used by gdbserver from stdout
             # while this complicates things a little, it allows us to
             # have multiple gdbservers running
             out = []
@@ -355,21 +354,25 @@ class FenInit(gdb.Command):
             # not found, error?
             return (None, None, out)
 
+        gdbserver_port = ':' + str(self.gdbserver_port
+                if hasattr(self, 'gdbserver_port') else 0)
+
         # can we run as root?
         (gdbserverProc, port, gdbserverRootOut) = runGDBServer(
-                ['shell', gdbserverPath, '--attach', ':0', pidAttach])
+                ['shell', gdbserverPath, '--attach',
+                 gdbserver_port, pidAttach])
         if not gdbserverProc:
             sys.stdout.write('as non-root... ')
             sys.stdout.flush()
             (gdbserverProc, port, gdbserverRunAsOut) = runGDBServer(
                     ['shell', 'run-as', pkg,
-                    gdbserverPath, '--attach', ':0', pidAttach])
+                    gdbserverPath, '--attach', gdbserver_port, pidAttach])
         if not gdbserverProc:
             sys.stdout.write('as root... ')
             sys.stdout.flush()
             adb.call(['shell', 'echo',
-                    ' '.join([gdbserverPath, '--attach', ':0', pidAttach]),
-                    '>', gdbserverPath + '.run'])
+                    ' '.join([gdbserverPath, '--attach', gdbserver_port,
+                    pidAttach]), '>', gdbserverPath + '.run'])
             adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
                     ['shell', 'su', '-c', gdbserverPath + '.run'])

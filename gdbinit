@@ -56,6 +56,7 @@ python import feninit, tracebt, fastload, adblog
 #python feninit.default.objdir = '~/mozilla/central/objdir-android'
 #python feninit.default.srcroot = '~/mozilla'
 #python feninit.default.no_launch = True
+#python feninit.default.gdbserver_port = 5039
 
 
 # Disable logcat redirection
