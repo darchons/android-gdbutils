@@ -378,11 +378,11 @@ class FenInit(gdb.Command):
                     ['shell', 'su', '-c', gdbserverPath + '.run'])
         if not gdbserverProc:
             print '\n"gdbserver" output:'
-            print ' ' + ' '.join(gdbserverRootOut)
+            print ' ' + ' '.join(gdbserverRootOut).replace('\0', '')
             print '"run-as" output:'
-            print ' ' + ' '.join(gdbserverRunAsOut)
+            print ' ' + ' '.join(gdbserverRunAsOut).replace('\0', '')
             print '"su -c" output:'
-            print ' ' + ' '.join(gdbserverSuOut)
+            print ' ' + ' '.join(gdbserverSuOut).replace('\0', '')
             raise gdb.GdbError('failed to run gdbserver')
 
         self.port = port
