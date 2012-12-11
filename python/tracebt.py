@@ -62,10 +62,13 @@ _initLogger(log)
 
 class Frame:
 
-    def __init__(self, pc, sp, is_thumb):
+    def __init__(self, pc, sp, is_thumb, regs = {}):
         self.pc = pc
         self.sp = sp
         self.is_thumb = is_thumb
+        regs['pc'] = pc
+        regs['sp'] = sp
+        self.regs = regs
 
     def printToGDB(self):
         gdb.execute('frame ' + hex(self.sp) + ' ' + hex(self.pc), False, False)
@@ -204,6 +207,8 @@ class Frame:
         branchHistory = []
         assemblyCache = AssemblyCache(self.pc, self.is_thumb)
         sp = self.sp
+        regs = self.regs;
+        regs['sp'] = savedSp = sp
 
         for pc, mnemonic, args, is_thumb in assemblyCache:
 
@@ -229,14 +234,19 @@ class Frame:
                 return (branchHistory[branchHistory.index(pc)].take,
                         new_pc, new_is_thumb)
 
+            if savedSp == sp: # sp hasn't changed, regs['sp'] might have
+                savedSp = sp = regs['sp']
+            else: # sp has changed, update regs['sp']
+                savedSp = regs['sp'] = sp
+
             # handle individual instructions
             if mnemonic == 'b' or mnemonic == 'bx' or \
                 mnemonic == 'bal' or mnemonic == 'bxal':
                 if args == 'lr':
                     # FIXME lr might not be valid
                     log.warning('frame (bx lr) @ %x : %x', pc, sp)
-                    pc = int(gdb.parse_and_eval('(unsigned)$lr'))
-                    return Frame(pc, sp, (pc & 1) != 0)
+                    pc = regs['lr']
+                    return Frame(pc, sp, (pc & 1) != 0, regs)
                 elif args.startswith('r'):
                     log.warning(
                             'skipped unconditional branch (%s %s) @ %x : %x',
@@ -272,23 +282,67 @@ class Frame:
             elif mnemonic == 'pop' or \
                 (mnemonic.startswith('ldmi') and args.startswith('sp!')) or \
                 (mnemonic.startswith('pop') and args.find('pc') >= 0):
-                sp += 4 * len(args[args.find('{') :].split(','))
+                for r in args.translate(None, '{ }').split(','):
+                    regs[r] = int(gdb.parse_and_eval('*(unsigned*)' + hex(sp)))
+                    sp += 4
                 if args.find('pc') > 0:
                     log.info('frame (pop pc) @ %x : %x', pc, sp)
-                    args = args[args.find('pc') :]
-                    pc = int(gdb.parse_and_eval('*(unsigned*)' +
-                            hex(sp - 4 * len(args.split(',')))))
-                    return Frame(pc, sp, (pc & 1) != 0)
+                    pc = regs['pc']
+                    return Frame(pc, sp, (pc & 1) != 0, regs)
 
-            elif mnemonic == 'add' and args.startswith('sp'):
-                assert args.split(',')[1].find('r') < 0, \
-                        'unhandled add: ' + args + ' (pc = ' + hex(pc) + ')'
-                sp += int(args[args.find('#') + 1 :], 0)
+            elif mnemonic == 'add' or mnemonic.startswith('add.'):
+                r = args.translate(None, ' ').split(',')
+                if r[0] in regs:
+                    if r[1] in regs:
+                        if len(r) == 2:
+                            regs[r[0]] += regs[r[1]]
+                        elif r[2] in regs:
+                            regs[r[0]] = regs[r[1]] + regs[r[2]]
+                        elif r[2].startswith('#'):
+                            regs[r[0]] = regs[r[1]] + int(r[2][1:], 0)
+                        else:
+                            log.warning('unhandled add: %s (pc = %s)',
+                                        args, hex(pc))
+                    elif r[1].startswith('#'):
+                        regs[r[0]] += int(r[1][1:], 0)
+                    else:
+                        log.warning('unhandled add: %s (pc = %s)',
+                                    args, hex(pc))
+                else:
+                    log.warning('unhandled add: %s (pc = %s)',
+                                args, hex(pc))
 
-            elif mnemonic == 'sub' and args.startswith('sp'):
-                assert args.split(',')[1].find('r') < 0, \
-                        'unhandled sub: ' + args + ' (pc = ' + hex(pc) + ')'
-                sp -= int(args[args.find('#') + 1 :], 0)
+            elif mnemonic == 'sub' or mnemonic.startswith('sub.'):
+                r = args.translate(None, ' ').split(',')
+                if r[0] in regs:
+                    if r[1] in regs:
+                        if len(r) == 2:
+                            regs[r[0]] -= regs[r[1]]
+                        elif r[2] in regs:
+                            regs[r[0]] = regs[r[1]] - regs[r[2]]
+                        elif r[2].startswith('#'):
+                            regs[r[0]] = regs[r[1]] - int(r[2][1:], 0)
+                        else:
+                            log.warning('unhandled sub: %s (pc = %s)',
+                                        args, hex(pc))
+                    elif r[1].startswith('#'):
+                        regs[r[0]] -= int(r[1][1:], 0)
+                    else:
+                        log.warning('unhandled sub: %s (pc = %s)',
+                                    args, hex(pc))
+                else:
+                    log.warning('unhandled sub: %s (pc = %s)',
+                                args, hex(pc))
+
+            elif mnemonic == 'mov' or mnemonic.startswith('mov.'):
+                r = args.translate(None, ' ').split(',')
+                if r[0] in regs and r[1] in regs:
+                    regs[r[0]] = regs[r[1]]
+                elif r[0] in regs and r[1].startswith('#'):
+                    regs[r[0]] = int(r[1][1:], 0)
+                else:
+                    log.warning('unhandled mov: %s (pc = %s)',
+                                args, hex(pc))
 
             elif args.startswith('pc') or ((args.find('pc') > args.find('{'))
                                     and (args.find('pc') < args.find('}'))):
@@ -351,6 +405,8 @@ class TraceBT(gdb.Command):
                     gdb.parse_and_eval('(unsigned)$sp'))
             is_thumb = bool(vals[0] if vals[0] else \
                     (gdb.parse_and_eval('$cpsr') & 0x20) != 0)
+            registers = gdb.execute('info registers', False, True).splitlines()
+            regs = {s.split()[0]: int(s.split()[1], 0) for s in registers};
         except gdb.GdbError:
             raise
         except (ValueError, gdb.error) as e:
@@ -359,7 +415,7 @@ class TraceBT(gdb.Command):
         try:
             fid = 0
             f = Frame(0, 0, False)
-            newf = Frame(pc, sp, is_thumb)
+            newf = Frame(pc, sp, is_thumb, regs)
             while newf != f:
                 print '#{0}: {1}'.format(fid, str(newf))
                 f = newf
