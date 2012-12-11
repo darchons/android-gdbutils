@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, readinput, os, sys, subprocess, threading, time
+import gdb, adb, readinput, adblog, os, sys, subprocess, threading, time, shlex
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -358,7 +358,8 @@ class FenInit(gdb.Command):
             print '\nRun another gdb session to debug child process.'
         print '\nReady. Use "continue" to resume execution.'
 
-    def _attachGDBServer(self, pkg, filePath, args, skipShell = False):
+    def _attachGDBServer(self, pkg, filePath, args,
+                         skipShell = False, redirectOut = False):
         # always push gdbserver in case there's an old version on the device
         gdbserverPath = '/data/local/tmp/gdbserver'
         adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
@@ -430,7 +431,15 @@ class FenInit(gdb.Command):
         # collect output from gdbserver in another thread
         def makeGdbserverWait(obj, proc):
             def gdbserverWait():
-                obj.gdbserverOut = proc.communicate();
+                if not redirectOut:
+                    obj.gdbserverOut = proc.communicate()
+                    return
+                while proc.poll() == None:
+                    line = proc.stdout.readline()
+                    if not line:
+                        break
+                    if adblog.continuing:
+                        sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
             return gdbserverWait;
         gdbserverThd = threading.Thread(
                 name = 'GDBServer',

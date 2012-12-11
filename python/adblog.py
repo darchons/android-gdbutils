@@ -185,8 +185,11 @@ class ADBLog(threading.Thread):
 def cont_handler(event):
     if not isinstance(event, gdb.ContinueEvent):
         return
+    global continuing
+    continuing = True
     if not bool(gdb.parameter('adb-log-redirect')):
         exit_handler(event)
+        continuing = True
         return
     global adblog, log_width, log_colorfn
     if not adblog:
@@ -198,12 +201,16 @@ def cont_handler(event):
     adblog.running = True
 
 def stop_handler(event):
+    global continuing
+    continuing = False
     global adblog
     if not adblog:
         return
     adblog.running = False
 
 def exit_handler(event):
+    global continuing
+    continuing = False
     global adblog
     if not adblog:
         return
@@ -212,6 +219,7 @@ def exit_handler(event):
     adblog = None
 
 adblog = None
+continuing = False
 gdb.events.cont.connect(cont_handler)
 gdb.events.stop.connect(stop_handler)
 gdb.events.exited.connect(exit_handler)
