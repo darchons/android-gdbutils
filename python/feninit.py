@@ -464,17 +464,24 @@ class FenInit(gdb.Command):
             if self.objdir:
                 print 'Enter path of unit test ' + \
                       '(use tab-completion to see possibilities)'
-                cpppath = readinput.call(': ', '-f', '-c',
-                               os.path.join(self.objdir, 'dist', 'bin'),
+                binpath = os.path.join(self.objdir, 'dist', 'bin')
+                cpppath = readinput.call(': ', '-f', '-c', binpath,
                                '--file-mode', '0100',
                                '--file-mode-mask', '0100')
+                cppcomps = shlex.split(cpppath)
+                cpppath = os.path.normpath(os.path.join(binpath,
+                                           os.path.expanduser(cppcomps[0])))
             else:
                 print 'Enter path of unit test'
                 cpppath = readinput.call(': ', '-f',
                                '--file-mode', '0100',
                                '--file-mode-mask', '0100')
-        print ''
+                cppcomps = shlex.split(cpppath)
+                cpppath = os.path.abspath(os.path.expanduser(cppcomps[0]))
+            cppargs = cppcomps[1:]
+            print ''
         self.cpppath = cpppath
+        self.cppargs = cppargs
 
     def _prepareCpp(self, pkg):
         ps = adb.call(['shell', 'ps']).splitlines()
@@ -506,6 +513,7 @@ class FenInit(gdb.Command):
 
     def _attachCpp(self, pkg):
         cppPath = '/data/local/tmp/' + os.path.basename(self.cpppath)
+        cppArgs = self.cppargs
         wrapperPath = '/data/local/tmp/cpptest.run'
         libPath = '/data/data/' + pkg + '/lib'
         cachePath = '/data/data/' + pkg + '/cache'
@@ -526,9 +534,11 @@ class FenInit(gdb.Command):
 
         gdbserver_port = ':' + str(self.gdbserver_port
                 if hasattr(self, 'gdbserver_port') else 0)
-        self._attachGDBServer(pkg, self.cpppath,
-                ['--wrapper', 'sh', wrapperPath, '--', gdbserver_port, cppPath],
-                skipShell)
+        gdbserver_args = ['--wrapper', 'sh', wrapperPath, '--',
+                          gdbserver_port, cppPath]
+        gdbserver_args.extend(cppArgs)
+        self._attachGDBServer(pkg, self.cpppath, gdbserver_args,
+                              skipShell, True)
 
         print '\nReady. Use "continue" to start execution.'
 
