@@ -113,22 +113,26 @@ log_redirect = LogRedirect()
 class ADBLog(threading.Thread):
 
     def _parseLog(self, logFile):
-        line = ''
-        while not line.startswith('['):
-            line = logFile.readline()
-            if not line:
-                raise StopIteration()
-        # line == '[ DAY TIME PID:TID PRIO/TAG ]'
-        items = line.strip('[] \t\r\n').split()
-        text = []
-        while True:
-            line = logFile.readline()
-            if not line:
-                raise StopIteration()
-            line = line.strip()
-            if not line:
-                break
-            text.append(line)
+        wholeLog = ''
+        while 'gecko' not in wholeLog and 'fennec' not in wholeLog:
+            line = ''
+            while not line.startswith('['):
+                line = logFile.readline()
+                if not line:
+                    raise StopIteration()
+            # line == '[ DAY TIME PID:TID PRIO/TAG ]'
+            items = line.strip('[] \t\r\n').split()
+            text = []
+            while True:
+                line = logFile.readline()
+                if not line:
+                    raise StopIteration()
+                line = line.strip()
+                if not line:
+                    break
+                text.append(line)
+            wholeLog = ' '.join(items).lower() + ',' + ' '.join(text).lower()
+
         pidtid = items[2].partition(':')
         priotag = items[3].partition('/')
         return ADBLogEntry(items[0], items[1],
@@ -139,10 +143,7 @@ class ADBLog(threading.Thread):
         super(ADBLog, self).__init__(name='ADBLog')
         self.daemon = True
 
-        logcatArgs = ['-v', 'long',
-                'Gecko:V', 'GeckoApp:V', 'GeckoAppJava:V',
-                'GeckoSurfaceView:V', 'GeckoChildLoad:V', 'GeckoFonts:V',
-                'GeckoMapFile:V', 'GeckoLibLoad:V', 'fennec:V', '*:S']
+        logcatArgs = ['-v', 'long']
 
         logCount = 0
         dump = cStringIO.StringIO(adb.call(['logcat', '-d'] + logcatArgs))
