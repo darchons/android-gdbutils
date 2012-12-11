@@ -54,8 +54,25 @@ if __name__ == '__main__': # not module
             if d.startswith(basename) and \
                     os.path.isdir(os.path.join(abspath, d)):
                 if not state:
-                    return d + os.sep
+                    return d + os.path.sep
                 state -= 1
+        return None
+
+    def fileComplete(text, state):
+        path = readline.get_line_buffer()
+        basename = os.path.basename(path)
+        dirname = os.path.dirname(path)
+        abspath = os.path.abspath(os.path.expanduser(dirname))
+        for f in os.listdir(abspath):
+            if f.startswith(basename):
+                if os.path.isdir(os.path.join(abspath, f)):
+                    if not state:
+                        return f + os.path.sep
+                    state -= 1
+                elif os.stat(os.path.join(abspath, f)).st_mode & fmm == fm:
+                    if not state:
+                        return f
+                    state -= 1
         return None
 
     def listComplete(text, state):
@@ -67,16 +84,39 @@ if __name__ == '__main__': # not module
     parser.add_option('-p', dest='p')
     parser.add_option('-l', dest='l')
     parser.add_option('-d', action='store_true', dest='d')
+    parser.add_option('-f', action='store_true', dest='f')
+    parser.add_option('-c', dest='c')
+    parser.add_option('--file-mode', dest='fm')
+    parser.add_option('--file-mode-mask', dest='fmm')
     (args, extras) = parser.parse_args()
 
     if hasattr(args, 'l') and args.l:
         lst = eval(args.l)
+        readline.set_completer_delims('')
         readline.set_completer(listComplete)
     elif hasattr(args, 'd') and args.d:
-        readline.set_completer_delims('\t\n/')
+        readline.set_completer_delims('\t\n' + os.path.sep)
         readline.set_completer(dirComplete)
+    elif hasattr(args, 'f') and args.f:
+        readline.set_completer_delims('\t\n' + os.path.sep)
+        readline.set_completer(fileComplete)
+    curdir = None
+    if hasattr(args, 'c') and args.c:
+        os.chdir(os.path.abspath(os.path.expanduser(args.c)))
+    fm = 0
+    fmm = 0
+    if hasattr(args, 'fm') and args.fm:
+        fm = eval(args.fm)
+        fmm = eval(args.fmm if hasattr(args, 'fmm') and args.fmm
+                            else -1)
 
-    sys.stderr.write(raw_input('' if not hasattr(args, 'p') else args.p))
+    out = raw_input('' if not hasattr(args, 'p') else args.p)
+    relout = os.path.abspath(os.path.expanduser(out))
+    if hasattr(args, 'd') and args.d and os.path.isdir(relout):
+        out = relout
+    elif hasattr(args, 'f') and args.f and os.path.isfile(relout):
+        out = relout
+    sys.stderr.write(out)
 
 else:
 

@@ -40,11 +40,43 @@ import gdb, adb, readinput, os, sys, subprocess, threading, time
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
 
+    TASKS = (
+        'Debug Fennec (default)',
+        'Debug compiled-code unit test'
+    )
+    (
+        TASK_FENNEC,
+        TASK_CPP_TEST
+    ) = (
+        0,
+        1
+    )
+
     def __init__(self):
         super(FenInit, self).__init__('feninit', gdb.COMMAND_SUPPORT)
 
     def complete(self, text, word):
         return gdb.COMPLETE_NONE
+
+    def _chooseTask(self):
+        print '\nFennec GDB utilities'
+        for i in range(len(self.TASKS)):
+            print '%d. %s' % (i + 1, self.TASKS[i])
+        task = 0
+        while task < 1 or task > len(self.TASKS):
+            task = readinput.call('Enter number from above: ', '-l',
+                                  str(list(self.TASKS)))
+            if not task:
+                task = 1
+                break
+            if task.isdigit():
+                task = int(task)
+                continue
+            matchTask = filter(lambda x: x.startswith(task), self.TASKS)
+            if len(matchTask) == 1:
+                task = self.TASKS.index(matchTask[0]) + 1
+        print ''
+        self.task = task - 1
 
     def _chooseDevice(self):
         dev = adb.chooseDevice()
@@ -95,27 +127,21 @@ class FenInit(gdb.Command):
         # let user choose even if only one objdir found,
         # because the user might want to not use an objdir
         while objdir not in objdirs:
-            if objdirs:
-                print 'Choices for object directory to use:'
-                print '0. Do not use object directory'
-                for i in range(len(objdirs)):
-                    print '%d. %s' % (i + 1, objdirs[i])
-                print 'Choose from above or enter alternative'
-                objdir = readinput.call(': ', '-d')
-                if not objdir:
-                    continue
-                elif objdir == '0':
-                    objdir = None
-                    break
-            else:
-                print 'No object directory found. Enter path or leave blank'
-                objdir = readinput.call(': ', '-d')
-                if not objdir:
-                    objdir = None
-                    break
-            if objdir.isdigit() and int(objdir) > 0 and \
+            print 'Choices for object directory to use:'
+            print '0. Do not use object directory'
+            for i in range(len(objdirs)):
+                print '%d. %s' % (i + 1, objdirs[i])
+            print 'Enter number from above or enter alternate path'
+            objdir = readinput.call(': ', '-d')
+            print ''
+            if not objdir:
+                continue
+            if objdir.isdigit() and int(objdir) >= 0 and \
                     int(objdir) <= len(objdirs):
-                objdir = objdirs[int(objdir) - 1]
+                if int(objdir) == 0:
+                    objdir = None
+                else:
+                    objdir = objdirs[int(objdir) - 1]
                 break
             objdir = os.path.abspath(os.path.expanduser(objdir))
             matchObjdir = filter(lambda x:
@@ -207,6 +233,7 @@ class FenInit(gdb.Command):
         while not pkg:
             pkg = readinput.call(
                 'Use package (e.g. org.mozilla.fennec): ', '-l', str(pkgs))
+        print ''
         return pkg
 
     def _launch(self, pkg):
@@ -221,8 +248,7 @@ class FenInit(gdb.Command):
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
             sys.stdout.flush()
-            out = adb.call(['shell', 'am', 'start',
-                    '-a', 'org.mozilla.gecko.DEBUG', '-n', pkg + '/.App'])
+            out = adb.call(['shell', 'am', 'start', '-n', pkg + '/.App'])
             if 'error' in out.lower():
                 print ''
                 print out
@@ -317,10 +343,22 @@ class FenInit(gdb.Command):
                 if pidAttach.isdigit() and int(pidAttach) > 0 \
                         and int(pidAttach) <= len(pidChild):
                     pidAttach = pidChild[pidAttach]
-            sys.stdout.write('Attaching... ')
+            sys.stdout.write('\nAttaching... ')
             sys.stdout.flush()
         self.pid = pidAttach
 
+        gdbserver_port = ':' + str(self.gdbserver_port
+                if hasattr(self, 'gdbserver_port') else 0)
+        self._attachGDBServer(
+                pkg,
+                (PARENT_FILE_PATH if pidParent else CHILD_FILE_PATH),
+                ['--attach', gdbserver_port, pidAttach])
+
+        if pidParent:
+            print '\nRun another gdb session to debug child process.'
+        print '\nReady. Use "continue" to resume execution.'
+
+    def _attachGDBServer(self, pkg, filePath, args, skipShell = False):
         # always push gdbserver in case there's an old version on the device
         gdbserverPath = '/data/local/tmp/gdbserver'
         adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
@@ -354,25 +392,26 @@ class FenInit(gdb.Command):
             # not found, error?
             return (None, None, out)
 
-        gdbserver_port = ':' + str(self.gdbserver_port
-                if hasattr(self, 'gdbserver_port') else 0)
-
         # can we run as root?
-        (gdbserverProc, port, gdbserverRootOut) = runGDBServer(
-                ['shell', gdbserverPath, '--attach',
-                 gdbserver_port, pidAttach])
+        gdbserverProc = None
+        if not skipShell:
+            gdbserverArgs = ['shell', gdbserverPath]
+            gdbserverArgs.extend(args)
+            (gdbserverProc, port, gdbserverRootOut) = runGDBServer(gdbserverArgs)
         if not gdbserverProc:
             sys.stdout.write('as non-root... ')
             sys.stdout.flush()
-            (gdbserverProc, port, gdbserverRunAsOut) = runGDBServer(
-                    ['shell', 'run-as', pkg,
-                    gdbserverPath, '--attach', gdbserver_port, pidAttach])
+            gdbserverArgs = ['shell', 'run-as', pkg, gdbserverPath]
+            gdbserverArgs.extend(args)
+            (gdbserverProc, port, gdbserverRunAsOut) = \
+                    runGDBServer(gdbserverArgs)
         if not gdbserverProc:
             sys.stdout.write('as root... ')
             sys.stdout.flush()
-            adb.call(['shell', 'echo',
-                    ' '.join([gdbserverPath, '--attach', gdbserver_port,
-                    pidAttach]), '>', gdbserverPath + '.run'])
+            gdbserverArgs = [gdbserverPath]
+            gdbserverArgs.extend(args)
+            adb.call(['shell', 'echo', '#!/bin/sh\n' +
+                    ' '.join(gdbserverArgs), '>', gdbserverPath + '.run'])
             adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
                     ['shell', 'su', '-c', gdbserverPath + '.run'])
@@ -406,14 +445,83 @@ class FenInit(gdb.Command):
         sys.stdout.write('Setting up remote debugging... ')
         sys.stdout.flush()
         # load the right file
-        gdb.execute('file ' + (PARENT_FILE_PATH
-                if pidParent else CHILD_FILE_PATH), False, True)
+        gdb.execute('file ' + filePath, False, True)
         gdb.execute('target remote :' + port, False, True)
-        print 'Done\n'
+        print 'Done'
 
-        if pidParent:
-            print 'Run another gdb session to debug child process.\n'
-        print 'Ready. Use "continue" to resume execution.'
+    def _chooseCpp(self, pkg):
+        cpppath = ''
+        while not os.path.isfile(cpppath):
+            if self.objdir:
+                print 'Enter path of unit test ' + \
+                      '(use tab-completion to see possibilities)'
+                cpppath = readinput.call(': ', '-f', '-c',
+                               os.path.join(self.objdir, 'dist', 'bin'),
+                               '--file-mode', '0100',
+                               '--file-mode-mask', '0100')
+            else:
+                print 'Enter path of unit test'
+                cpppath = readinput.call(': ', '-f',
+                               '--file-mode', '0100',
+                               '--file-mode-mask', '0100')
+        print ''
+        self.cpppath = cpppath
+
+    def _prepareCpp(self, pkg):
+        ps = adb.call(['shell', 'ps']).splitlines()
+        pkgProcs = [x for x in ps if pkg in x]
+        if pkgProcs:
+            sys.stdout.write('Restarting %s... ' % pkg);
+            sys.stdout.flush()
+            adb.call(['shell', 'am', 'force-stop', pkg])
+            # wait for fennec to stop
+            while pkgProcs:
+                ps = adb.call(['shell', 'ps']).splitlines()
+                pkgProcs = [x for x in ps if pkg in x]
+        else:
+            # launch
+            sys.stdout.write('Launching %s... ' % pkg)
+            sys.stdout.flush()
+        out = adb.call(['shell', 'am', 'start', '-n', pkg + '/.App',
+                '--es', 'env0', 'MOZ_LINKER_EXTRACT=1'])
+        if 'error' in out.lower():
+            print '\n' + out
+            raise gdb.GdbError('Error while launching %s.' % pkg)
+        else:
+            while not pkgProcs:
+                ps = adb.call(['shell', 'ps']).splitlines()
+                pkgProcs = [x for x in ps if pkg in x]
+            # FIXME sleep for 3s to allow time to launch
+            time.sleep(3)
+            print 'Done'
+
+    def _attachCpp(self, pkg):
+        cppPath = '/data/local/tmp/' + os.path.basename(self.cpppath)
+        wrapperPath = '/data/local/tmp/cpptest.run'
+        libPath = '/data/data/' + pkg + '/lib'
+        cachePath = '/data/data/' + pkg + '/cache'
+        profilePath = '/data/data/' + pkg + '/files/mozilla'
+
+        sys.stdout.write('Attaching to test... ')
+        sys.stdout.flush()
+        adb.push(self.cpppath, cppPath)
+        adb.call(['shell', 'echo', '#!/bin/sh\n' +
+                  ' '.join(['LD_LIBRARY_PATH=\\$LD_LIBRARY_PATH:' +
+                            libPath + ':' + cachePath, 'exec', '\\$@']),
+                  '>', wrapperPath])
+        adb.call(['shell', 'chmod', '755', wrapperPath])
+
+        skipShell = False
+        if 'mozilla' not in adb.call(['shell', 'ls', profilePath]):
+            skipShell = True
+
+        gdbserver_port = ':' + str(self.gdbserver_port
+                if hasattr(self, 'gdbserver_port') else 0)
+        self._attachGDBServer(pkg, self.cpppath,
+                ['--wrapper', 'sh', wrapperPath, '--', gdbserver_port, cppPath],
+                skipShell)
+
+        print '\nReady. Use "continue" to start execution.'
 
     def invoke(self, argument, from_tty):
         try:
@@ -425,17 +533,22 @@ class FenInit(gdb.Command):
                     print 'Already in remote debug mode.'
                     return
                 delattr(self, 'gdbserver')
+            self._chooseTask()
             self._chooseDevice()
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
             
             pkg = self._getPackageName()
-            no_launch = hasattr(self, 'no_launch') and self.no_launch
-            if not no_launch:
-                self._launch(pkg)
-                pass
-            self._attach(pkg)
-            
+            if self.task == self.TASK_FENNEC:
+                no_launch = hasattr(self, 'no_launch') and self.no_launch
+                if not no_launch:
+                    self._launch(pkg)
+                self._attach(pkg)
+            elif self.task == self.TASK_CPP_TEST:
+                self._chooseCpp(pkg)
+                self._prepareCpp(pkg)
+                self._attachCpp(pkg)
+
             self.dont_repeat()
         except:
             # if there is an error, a gdbserver might be left hanging
