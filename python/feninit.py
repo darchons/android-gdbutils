@@ -411,7 +411,7 @@ class FenInit(gdb.Command):
             sys.stdout.flush()
             gdbserverArgs = [gdbserverPath]
             gdbserverArgs.extend(args)
-            adb.call(['shell', 'echo', '#!/bin/sh\n' +
+            adb.call(['shell', 'echo', '#!/system/bin/sh\n' +
                     ' '.join(gdbserverArgs), '>', gdbserverPath + '.run'])
             adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
