@@ -35,7 +35,8 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, readinput, adblog, os, sys, subprocess, threading, time, shlex
+import gdb, adb, readinput, adblog, os, sys, subprocess, threading, time
+import shlex, tempfile
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -466,27 +467,48 @@ class FenInit(gdb.Command):
 
     def _chooseCpp(self, pkg):
         cpppath = ''
+        def parseCpp(cmd):
+            try:
+                comps = shlex.split(cmd)
+                # cpp_env is a user-defined variable
+                # cppenv is an internal variable
+                if hasattr(self, 'cpp_env'):
+                    envcomps = shlex.split(self.cpp_env)
+                    envcomps.extend(comps)
+                    comps = envcomps
+            except ValueError as e:
+                print str(e)
+                return ([], '', [])
+            for i in range(len(comps)):
+                if '=' in comps[i]:
+                    continue
+                return (comps[0: i], comps[i], comps[i:])
+            return (comps, '', [])
         while not os.path.isfile(cpppath):
             if self.objdir:
                 print 'Enter path of unit test ' + \
                       '(use tab-completion to see possibilities)'
+                print '    path can be relative to $objdir/dist/bin or absolute'
+                print '    environmental variables and arguments are supported'
+                print '    e.g. FOO=bar TestFooBar arg1 arg2'
                 binpath = os.path.join(self.objdir, 'dist', 'bin')
                 cpppath = readinput.call(': ', '-f', '-c', binpath,
                                '--file-mode', '0100',
                                '--file-mode-mask', '0100')
-                cppcomps = shlex.split(cpppath)
+                cppenv, cpppath, cppargs = parseCpp(cpppath)
                 cpppath = os.path.normpath(os.path.join(binpath,
-                                           os.path.expanduser(cppcomps[0])))
+                                           os.path.expanduser(cpppath)))
             else:
                 print 'Enter path of unit test'
                 cpppath = readinput.call(': ', '-f',
                                '--file-mode', '0100',
                                '--file-mode-mask', '0100')
-                cppcomps = shlex.split(cpppath)
-                cpppath = os.path.abspath(os.path.expanduser(cppcomps[0]))
-            cppargs = cppcomps[1:]
+                cppenv, cpppath, cppargs = parseCpp(cpppath)
+                cpppath = os.path.abspath(os.path.expanduser(cpppath))
             print ''
         self.cpppath = cpppath
+        self.cppenv = [s.partition('=')[0] + '=' + repr(s.partition('=')[-1])
+                       for s in cppenv]
         self.cppargs = cppargs
 
     def _prepareCpp(self, pkg):
@@ -519,6 +541,7 @@ class FenInit(gdb.Command):
 
     def _attachCpp(self, pkg):
         cppPath = '/data/local/tmp/' + os.path.basename(self.cpppath)
+        cppEnv = self.cppenv
         cppArgs = self.cppargs
         wrapperPath = '/data/local/tmp/cpptest.run'
         libPath = '/data/data/' + pkg + '/lib'
@@ -528,11 +551,17 @@ class FenInit(gdb.Command):
         sys.stdout.write('Attaching to test... ')
         sys.stdout.flush()
         adb.push(self.cpppath, cppPath)
-        adb.call(['shell', 'echo', '#!/bin/sh\n' +
-                  ' '.join(['LD_LIBRARY_PATH=\\$LD_LIBRARY_PATH:' +
-                            libPath + ':' + cachePath, 'exec', '\\$@']),
-                  '>', wrapperPath])
+        with tempfile.NamedTemporaryFile(delete = False) as f:
+            lines = ['#!/system/bin/sh']
+            lines.extend(['export ' + s for s in cppEnv])
+            lines.append('export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' +
+                         libPath + ':' + cachePath)
+            lines.append('exec $@')
+            f.writelines('\n'.join(lines))
+            tmpname = f.name
+        adb.push(tmpname, wrapperPath)
         adb.call(['shell', 'chmod', '755', wrapperPath])
+        os.remove(tmpname)
 
         skipShell = False
         if 'mozilla' not in adb.call(['shell', 'ls', profilePath]):

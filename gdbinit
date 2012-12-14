@@ -64,6 +64,11 @@ python import feninit, tracebt, fastload, adblog
 
 #python feninit.default.gdbserver_port = 5039
 
+# set feninit.default.cpp_env to set environmental variables for
+#   debugging compiled-code unit tests
+
+#python feninit.default.cpp_env = 'FOO=bar BAR="foo bar"'
+
 
 # Disable logcat redirection
 #set adb-log-redirect off
