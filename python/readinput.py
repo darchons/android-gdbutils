@@ -35,44 +35,65 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import readline, sys, os
-
-readline.parse_and_bind('tab: complete')
-readline.parse_and_bind('set bell-style none')
-readline.set_completer()
+import sys, os
 
 if __name__ == '__main__': # not module
 
+    import readline, shlex
     from optparse import OptionParser
 
+    readline.parse_and_bind('tab: complete')
+    readline.parse_and_bind('set bell-style none')
+    readline.parse_and_bind('set completion-ignore-case on')
+    readline.set_completer()
+
+    def safeSplit(text):
+        def trySplit(text, closing):
+            try:
+                if not closing:
+                    return []
+                return shlex.split(text + closing[0])
+            except ValueError:
+                return trySplit(text, closing[1:])
+        return trySplit(text, ['', '"', "'"])
+
     def dirComplete(text, state):
-        path = readline.get_line_buffer()
+        comps = safeSplit(readline.get_line_buffer()[0: readline.get_endidx()])
+        path = comps[-1] if comps else ''
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
         abspath = os.path.abspath(os.path.expanduser(dirname))
         for d in os.listdir(abspath):
-            if d.startswith(basename) and \
-                    os.path.isdir(os.path.join(abspath, d)):
-                if not state:
-                    return d + os.path.sep
-                state -= 1
+            if not d.lower().startswith(basename.lower()):
+                continue
+            if d.startswith('.') and not basename.startswith('.'):
+                continue
+            if not os.path.isdir(os.path.join(abspath, d)):
+                continue
+            if not state:
+                return d + os.path.sep
+            state -= 1
         return None
 
     def fileComplete(text, state):
-        path = readline.get_line_buffer()
+        comps = safeSplit(readline.get_line_buffer()[0: readline.get_endidx()])
+        path = comps[-1] if comps else ''
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
         abspath = os.path.abspath(os.path.expanduser(dirname))
         for f in os.listdir(abspath):
-            if f.startswith(basename):
-                if os.path.isdir(os.path.join(abspath, f)):
-                    if not state:
-                        return f + os.path.sep
-                    state -= 1
-                elif os.stat(os.path.join(abspath, f)).st_mode & fmm == fm:
-                    if not state:
-                        return f
-                    state -= 1
+            if not f.lower().startswith(basename.lower()):
+                continue
+            if f.startswith('.') and not basename.startswith('.'):
+                continue
+            if os.path.isdir(os.path.join(abspath, f)):
+                if not state:
+                    return f + os.path.sep
+                state -= 1
+            elif os.stat(os.path.join(abspath, f)).st_mode & fmm == fm:
+                if not state:
+                    return f
+                state -= 1
         return None
 
     def listComplete(text, state):
@@ -95,10 +116,10 @@ if __name__ == '__main__': # not module
         readline.set_completer_delims('')
         readline.set_completer(listComplete)
     elif hasattr(args, 'd') and args.d:
-        readline.set_completer_delims('\t\n' + os.path.sep)
+        readline.set_completer_delims('\t ' + os.path.sep)
         readline.set_completer(dirComplete)
     elif hasattr(args, 'f') and args.f:
-        readline.set_completer_delims('\t\n' + os.path.sep)
+        readline.set_completer_delims('\t ' + os.path.sep)
         readline.set_completer(fileComplete)
     curdir = None
     if hasattr(args, 'c') and args.c:
