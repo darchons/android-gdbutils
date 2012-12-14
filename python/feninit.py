@@ -395,6 +395,7 @@ class FenInit(gdb.Command):
 
         # can we run as root?
         gdbserverProc = None
+        gdbserverRootOut = ''
         if not skipShell:
             gdbserverArgs = ['shell', gdbserverPath]
             gdbserverArgs.extend(args)
@@ -417,12 +418,17 @@ class FenInit(gdb.Command):
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
                     ['shell', 'su', '-c', gdbserverPath + '.run'])
         if not gdbserverProc:
-            print '\n"gdbserver" output:'
-            print ' ' + ' '.join(gdbserverRootOut).replace('\0', '')
+            print ''
+            if gdbserverRootOut:
+                print '"gdbserver" output:'
+                print ' ' + '\n '.join([s for s in gdbserverRootOut
+                                        if s]).replace('\0', '')
             print '"run-as" output:'
-            print ' ' + ' '.join(gdbserverRunAsOut).replace('\0', '')
+            print ' ' + '\n '.join([s for s in gdbserverRunAsOut
+                                    if s]).replace('\0', '')
             print '"su -c" output:'
-            print ' ' + ' '.join(gdbserverSuOut).replace('\0', '')
+            print ' ' + '\n '.join([s for s in gdbserverSuOut
+                                    if s]).replace('\0', '')
             raise gdb.GdbError('failed to run gdbserver')
 
         self.port = port
