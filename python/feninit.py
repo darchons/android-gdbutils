@@ -120,8 +120,6 @@ class FenInit(gdb.Command):
             objdir = self.objdir
             if objdir:
                 scanSrcDir(objdirs, objdir)
-                if objdir not in objdirs:
-                    print 'feninit.default.objdir (%s) is not found' % objdir
             else:
                 objdir = None
                 objdirs.append(objdir)
