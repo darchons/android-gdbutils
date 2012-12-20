@@ -351,7 +351,7 @@ class FenInit(gdb.Command):
         self._attachGDBServer(
                 pkg,
                 (PARENT_FILE_PATH if pidParent else CHILD_FILE_PATH),
-                ['--attach', gdbserver_port, pidAttach])
+                ['--once', '--attach', gdbserver_port, pidAttach])
 
         if pidParent:
             print '\nRun another gdb session to debug child process.'
@@ -567,7 +567,7 @@ class FenInit(gdb.Command):
 
         gdbserver_port = ':' + str(self.gdbserver_port
                 if hasattr(self, 'gdbserver_port') else 0)
-        gdbserver_args = ['--wrapper', 'sh', wrapperPath, '--',
+        gdbserver_args = ['--once', '--wrapper', 'sh', wrapperPath, '--',
                           gdbserver_port, cppPath]
         gdbserver_args.extend(cppArgs)
         self._attachGDBServer(pkg, self.cpppath, gdbserver_args,
