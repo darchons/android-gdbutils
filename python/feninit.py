@@ -203,9 +203,9 @@ class FenInit(gdb.Command):
                 os.pathsep.join(searchPaths), False, True)
         print 'Updated solib-search-path.'
 
-    def _getPackageName(self):
-        if self.objdir:
-            acname = os.path.join(self.objdir, 'config', 'autoconf.mk')
+    def _getPackageName(self, objdir):
+        if objdir:
+            acname = os.path.join(objdir, 'config', 'autoconf.mk')
             try:
                 acfile = open(acname)
                 for line in acfile:
@@ -463,7 +463,7 @@ class FenInit(gdb.Command):
         gdb.execute('target remote :' + port, False, True)
         print 'Done'
 
-    def _chooseCpp(self, pkg):
+    def _chooseCpp(self):
         cpppath = ''
         def parseCpp(cmd):
             try:
@@ -590,14 +590,14 @@ class FenInit(gdb.Command):
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
             
-            pkg = self._getPackageName()
+            pkg = self._getPackageName(self.objdir)
             if self.task == self.TASK_FENNEC:
                 no_launch = hasattr(self, 'no_launch') and self.no_launch
                 if not no_launch:
                     self._launch(pkg)
                 self._attach(pkg)
             elif self.task == self.TASK_CPP_TEST:
-                self._chooseCpp(pkg)
+                self._chooseCpp()
                 self._prepareCpp(pkg)
                 self._attachCpp(pkg)
 
