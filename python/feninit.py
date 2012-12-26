@@ -464,6 +464,8 @@ class FenInit(gdb.Command):
         print 'Done'
 
     def _chooseCpp(self):
+        rootdir = os.path.join(self.objdir, 'dist', 'bin') \
+                  if self.objdir else os.getcwd()
         cpppath = ''
         def parseCpp(cmd):
             try:
@@ -483,26 +485,18 @@ class FenInit(gdb.Command):
                 return (comps[0: i], comps[i], comps[i:])
             return (comps, '', [])
         while not os.path.isfile(cpppath):
+            print 'Enter path of unit test ' + \
+                  '(use tab-completion to see possibilities)'
             if self.objdir:
-                print 'Enter path of unit test ' + \
-                      '(use tab-completion to see possibilities)'
                 print '    path can be relative to $objdir/dist/bin or absolute'
-                print '    environmental variables and arguments are supported'
-                print '    e.g. FOO=bar TestFooBar arg1 arg2'
-                binpath = os.path.join(self.objdir, 'dist', 'bin')
-                cpppath = readinput.call(': ', '-f', '-c', binpath,
-                               '--file-mode', '0100',
-                               '--file-mode-mask', '0100')
-                cppenv, cpppath, cppargs = parseCpp(cpppath)
-                cpppath = os.path.normpath(os.path.join(binpath,
-                                           os.path.expanduser(cpppath)))
-            else:
-                print 'Enter path of unit test'
-                cpppath = readinput.call(': ', '-f',
-                               '--file-mode', '0100',
-                               '--file-mode-mask', '0100')
-                cppenv, cpppath, cppargs = parseCpp(cpppath)
-                cpppath = os.path.abspath(os.path.expanduser(cpppath))
+            print '    environmental variables and arguments are supported'
+            print '    e.g. FOO=bar TestFooBar arg1 arg2'
+            cpppath = readinput.call(': ', '-f', '-c', rootdir,
+                           '--file-mode', '0100',
+                           '--file-mode-mask', '0100')
+            cppenv, cpppath, cppargs = parseCpp(cpppath)
+            cpppath = os.path.normpath(os.path.join(rootdir,
+                                       os.path.expanduser(cpppath)))
             print ''
         self.cpppath = cpppath
         self.cppenv = [s.partition('=')[0] + '=' + repr(s.partition('=')[-1])
