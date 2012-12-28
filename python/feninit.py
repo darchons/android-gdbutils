@@ -683,7 +683,7 @@ class FenInit(gdb.Command):
         topsrcdir = self._getTopSrcDir(objdir)
 
         if objdir and os.path.isfile(os.path.join(objdir, 'Makefile')) and \
-                      os.path.isdir(os.path.join(objdir, 'testing')):
+                      os.path.isdir(os.path.join(objdir, '_tests')):
             # use `make mochitest-remote`
             exe = ['make', '-C', objdir, 'mochitest-remote']
             env['DM_TRANS'] = 'adb'
