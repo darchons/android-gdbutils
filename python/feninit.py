@@ -61,11 +61,12 @@ class FenInit(gdb.Command):
 
     def _chooseTask(self):
         print '\nFennec GDB utilities'
+        print ' (edit utils/gdbinit file to change preferences)'
         for i in range(len(self.TASKS)):
             print '%d. %s' % (i + 1, self.TASKS[i])
         task = 0
         while task < 1 or task > len(self.TASKS):
-            task = readinput.call('Enter number from above: ', '-l',
+            task = readinput.call('Enter option from above: ', '-l',
                                   str(list(self.TASKS)))
             if not task:
                 task = 1
@@ -73,11 +74,12 @@ class FenInit(gdb.Command):
             if task.isdigit():
                 task = int(task)
                 continue
-            matchTask = filter(lambda x: x.startswith(task), self.TASKS)
+            matchTask = filter(lambda x: x.lower().startswith(task.lower()),
+                               self.TASKS)
             if len(matchTask) == 1:
                 task = self.TASKS.index(matchTask[0]) + 1
         print ''
-        self.task = task - 1
+        return task - 1
 
     def _chooseDevice(self):
         dev = adb.chooseDevice()
@@ -482,10 +484,10 @@ class FenInit(gdb.Command):
             for i in range(len(comps)):
                 if '=' in comps[i]:
                     continue
-                return (comps[0: i], comps[i], comps[i:])
+                return (comps[0: i], comps[i], comps[(i+1):])
             return (comps, '', [])
         while not os.path.isfile(cpppath):
-            print 'Enter path of unit test ' + \
+            print 'Enter path of unit test ' \
                   '(use tab-completion to see possibilities)'
             if self.objdir:
                 print '    path can be relative to $objdir/dist/bin or absolute'
