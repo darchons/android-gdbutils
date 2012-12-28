@@ -167,7 +167,9 @@ class FenInit(gdb.Command):
                 'system/lib/liblog.so', 'system/lib/libz.so',
                 'system/lib/libGLESv2.so', 'system/bin/linker']
         # search path for above libraries/binaries
-        DEFAULT_SEARCH_PATHS = ['system/lib', 'system/bin']
+        DEFAULT_SEARCH_PATHS = [['system', 'lib'],
+                                ['system', 'vendor', 'lib'],
+                                ['system', 'bin']]
 
         datadir = str(gdb.parameter('data-directory'))
         libdir = os.path.abspath(
@@ -199,7 +201,7 @@ class FenInit(gdb.Command):
         gdb.execute('set sysroot ' + libdir, False, True)
         print 'Set sysroot to "%s".' % libdir
 
-        searchPaths = [os.path.join(libdir, d) \
+        searchPaths = [os.path.join(libdir, os.path.sep.join(d)) \
                 for d in DEFAULT_SEARCH_PATHS]
         if self.objdir:
             searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
@@ -221,7 +223,7 @@ class FenInit(gdb.Command):
                     print 'Using package %s.' % pkg
                     return pkg
                 acfile.close()
-            except OSError:
+            except IOError:
                 pass
         pkgs = [x.partition(':')[-1] for x in \
             adb.call(['shell', 'pm', 'list', 'packages']).splitlines() \
@@ -586,7 +588,7 @@ class FenInit(gdb.Command):
                     topsrcdir = line.partition('=')[2].strip()
                     return topsrcdir
                 mkfile.close()
-            except OSError:
+            except IOError:
                 pass
             topsrcdir = os.path.join(objdir, '..')
             if os.path.isfile(os.path.join(topsrcdir, 'client.mk')):

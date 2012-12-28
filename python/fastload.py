@@ -35,7 +35,7 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, threading, os, sys, subprocess, feninit
+import gdb, threading, os, sys, subprocess, feninit, adb
 
 class FastLoad(gdb.Command):
     '''Pull libraries in background'''
@@ -49,14 +49,29 @@ class FastLoad(gdb.Command):
 
     def invoke(self, argument, from_tty):
         if self._loader:
+            print 'Already running.'
             return
         libdir = feninit.default.libdir \
                 if hasattr(feninit.default, 'libdir') else None
-        if not libdir or (argument == 'quick' and os.path.exists(
-                os.path.join(libdir, 'system', 'lib', 'libdvm.so'))):
+        if not libdir:
             return
+        force = True
+        idfile = os.path.join(libdir, '.id')
+        devid = adb.call(['shell', 'cat', '/proc/version',
+                          '/system/build.prop'])[0:2048].strip()
+        try:
+            with open(idfile, 'r') as libid:
+                if libid.read(2048) == devid:
+                    force = False
+                    if argument == 'quick':
+                        return
+        except IOError:
+            pass
         self._loader = FastLoad.Loader()
         self._loader.solibs = gdb.execute('info sharedlibrary', False, True)
+        self._loader.force = force
+        self._loader.idfile = idfile
+        self._loader.devid = devid
         gdb.events.cont.connect(self.cont_handler)
         gdb.events.stop.connect(self.stop_handler)
         gdb.events.exited.connect(self.exit_handler)
@@ -68,6 +83,8 @@ class FastLoad(gdb.Command):
 
     def cont_handler(self, event):
         if not isinstance(event, gdb.ContinueEvent):
+            return
+        if not self._loader:
             return
         self._loader.continuing = True
 
@@ -104,29 +121,42 @@ class FastLoad(gdb.Command):
             buckets = [[] for x in range(PARALLEL_LIMIT)]
 
             for lib in (x.split()[-1] for x in self.solibs.splitlines()
-                    if ('.so' in x or '/' in x) and len(x.split()) == 2):
+                    if ('.so' in x or '/' in x) and len(x.split()) >= 2):
+                if os.path.exists(lib): # symbol already loaded
+                    if not self.force or not lib.startswith(libdir):
+                        continue
+                    if os.path.join('system', 'lib') in lib or \
+                       os.path.join('system', 'vendor', 'lib') in lib:
+                        # turn to a relative path
+                        lib = lib.split(os.path.sep)[-1]
+                    else:
+                        # turn to an absolute path
+                        lib = '/' + '/'.join(lib[len(libdir):]
+                                       .lstrip(os.path.sep)
+                                       .split(os.path.sep))
                 if objdir and os.path.exists(
                         os.path.join(objdir, 'dist', 'bin', lib)):
                     continue
                 if '/' in lib:
                     src = lib
-                    dst = os.path.join(libdir, lib.lstrip('/'))
-                    if os.path.exists(dst):
+                    dst = os.path.join(libdir, os.path.sep.join(
+                                       lib.lstrip('/').split('/')))
+                    if not self.force and os.path.exists(dst):
                         continue
                     bucket = min(buckets, key=lambda x: len(x))
                     bucket.append((src, dst))
                     continue
-                for srclibdir in ['', 'hw/', 'egl/']:
+                for srclibdir in ['', 'drm/', 'hw/', 'egl/']:
                     src = '/system/lib/' + srclibdir + lib
                     dst = os.path.join(libdir, 'system', 'lib', lib)
-                    if os.path.exists(dst):
+                    if not self.force and os.path.exists(dst):
                         continue
                     bucket = min(buckets, key=lambda x: len(x))
                     bucket.append((src, dst))
                 for srclibdir in ['', 'drm/', 'egl/', 'hw/']:
                     src = '/system/vendor/lib/' + srclibdir + lib
                     dst = os.path.join(libdir, 'system', 'vendor', 'lib', lib)
-                    if os.path.exists(dst):
+                    if not self.force and os.path.exists(dst):
                         continue
                     bucket = min(buckets, key=lambda x: len(x))
                     bucket.append((src, dst))
@@ -139,9 +169,6 @@ class FastLoad(gdb.Command):
             def makePullLibs(bucket, fnull):
                 def doPullLibs():
                     for fromto in bucket:
-                        if self.continuing:
-                            sys.__stderr__.write(
-                                    'Background-loading %s.\n' % fromto[0])
                         cmd = [self.adbcmd]
                         cmd += ['-s', self.adbdev] if self.adbdev else []
                         cmd += ['pull', fromto[0], fromto[1]]
@@ -156,6 +183,12 @@ class FastLoad(gdb.Command):
             for thread in threads:
                 thread.join()
             fnull.close()
+            if hasattr(self, 'idfile'):
+                try:
+                    with open(self.idfile, 'w') as libid:
+                        libid.write(self.devid)
+                except IOError:
+                    pass
             if self.continuing:
                 sys.__stderr__.write(
                         'All libraries pulled from device. Continuing.\n')
