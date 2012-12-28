@@ -94,7 +94,7 @@ python import feninit, tracebt, fastload, adblog
 #   to fetch XRE for running remote Mochitests; default is latest Aurora;
 #   not applicable if feninit.default.mochi_xre is set
 
-#python feninit.default.mochi_xre_url = 'pub/mozilla.org/firefox/nightly/latest-mozilla-aurora'
+#python feninit.default.mochi_xre_url = '/pub/mozilla.org/firefox/nightly/latest-mozilla-aurora'
 
 # set feninit.default.mochi_xre_update to set the interval in days
 #   before updating local XRE from feninit.default.mochi_xre_url;
