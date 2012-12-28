@@ -90,6 +90,18 @@ python import feninit, tracebt, fastload, adblog
 
 #python feninit.default.mochi_harness = '~/android-gdb/xre/mochitest'
 
+# set feninit.default.mochi_xre_url to set the path under ftp.mozilla.org
+#   to fetch XRE for running remote Mochitests; default is latest Aurora;
+#   not applicable if feninit.default.mochi_xre is set
+
+#python feninit.default.mochi_xre_url = 'pub/mozilla.org/firefox/nightly/latest-mozilla-aurora'
+
+# set feninit.default.mochi_xre_update to set the interval in days
+#   before updating local XRE from feninit.default.mochi_xre_url;
+#   not applicable if feninit.default.mochi_xre is set
+
+#python feninit.default.mochi_xre_update = 28
+
 
 # Disable logcat redirection
 #set adb-log-redirect off

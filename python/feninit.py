@@ -36,7 +36,7 @@
 # ***** END LICENSE BLOCK *****
 
 import gdb, adb, readinput, adblog, getxre
-import os, sys, subprocess, threading, time, shlex, tempfile, pipes
+import os, sys, subprocess, threading, time, shlex, tempfile, pipes, shutil
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -656,16 +656,50 @@ class FenInit(gdb.Command):
             if xredir:
                 return os.path.abspath(xredir)
             print 'mochi_xre directory does not contain xpcshell'
+
         xredatadir = os.path.abspath(
                      os.path.join(datadir, os.path.pardir, 'xre'))
+        xreupdate = os.path.join(xredatadir, '.update')
+        def touchUpdate():
+            with open(xreupdate, 'a'):
+                os.utime(xreupdate, None)
+
         xredir = checkXREDir(xredatadir)
+        if xredir:
+            if not os.path.isfile(xreupdate):
+                touchUpdate()
+            else:
+                interval = (self.mochi_xre_update
+                        if hasattr(self, 'mochi_xre_update') else 28)
+                if time.time() - os.path.getmtime(xreupdate) >= \
+                        interval * 24 * 60 * 60:
+                    ans = ''
+                    while not ans or (ans[0] != 'y' and ans[0] != 'Y' and
+                                      ans[0] != 'n' and ans[0] != 'N'):
+                        ans = readinput.call(
+                            'Last checked for XRE update %d days ago; '
+                            'update now? [yes/no]: ' %
+                            ((time.time() - os.path.getmtime(xreupdate))
+                                / 60 / 60 / 24),
+                            '-l', str(['yes', 'no']))
+                    print ''
+                    if ans[0] == 'y' or ans[0] == 'Y':
+                        shutil.rmtree(xredatadir, ignore_errors=True)
+                        getxre.call(xredatadir, self.mochi_xre_url
+                                    if hasattr(self, 'mochi_xre_url')
+                                    else None)
+                    # update timestamp regardless of choice above
+                    touchUpdate()
         while not xredir:
             print 'Enter path of XRE directory containing xpcshell,'
             print ' or leave blank to download from ftp.mozilla.org (~100MB)'
             xredir = readinput.call(': ', '-d')
             print ''
             if not xredir:
-                getxre.call(xredatadir)
+                getxre.call(xredatadir, self.mochi_xre_url
+                                        if hasattr(self, 'mochi_xre_url')
+                                        else None)
+                touchUpdate()
                 xredir = xredatadir
             xredir = checkXREDir(xredir)
         return os.path.abspath(xredir)
