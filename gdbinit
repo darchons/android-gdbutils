@@ -69,12 +69,34 @@ python import feninit, tracebt, fastload, adblog
 
 #python feninit.default.cpp_env = 'FOO=bar BAR="foo bar"'
 
+# set feninit.default.mochi_env to set environmental variables for
+#   Fennec when debugging content Mochitests
+
+#python feninit.default.mochi_env = 'FOO=bar BAR="foo bar"'
+
+# set feninit.default.mochi_args to pass additional arguments to the
+#   remote Mochitest harness; for a list of possible arguments, run
+#   `python $objdir/_tests/testing/mochitest/runtestsremote.py --help`
+
+#python feninit.default.mochi_args = '--arg1=foo --arg2=bar'
+
+# set feninit.default.mochi_xre to set the default XRE path when
+#   launching remote Mochitests
+
+#python feninit.default.mochi_xre = '~/android-gdb/xre/bin'
+
+# set feninit.default.mochi_harness to set the fallback path of the
+#   remote Mochitest harness ('runtestsremote.py')
+
+#python feninit.default.mochi_harness = '~/android-gdb/xre/mochitest'
+
 
 # Disable logcat redirection
 #set adb-log-redirect off
 
 # Set logcat color scheme
 #set adb-log-color [order|priority|thread]
+
 
 # Add a command for dumping Java stack traces
 define dump-java-stack

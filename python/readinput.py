@@ -132,7 +132,7 @@ if __name__ == '__main__': # not module
                             else -1)
 
     out = raw_input('' if not hasattr(args, 'p') else args.p)
-    relout = os.path.abspath(os.path.expanduser(out))
+    relout = os.path.abspath(os.path.expanduser(out)) if out else ''
     if hasattr(args, 'd') and args.d and os.path.isdir(relout):
         out = relout
     elif hasattr(args, 'f') and args.f and os.path.isfile(relout):

@@ -35,22 +35,25 @@
 #
 # ***** END LICENSE BLOCK *****
 
-import gdb, adb, readinput, adblog, os, sys, subprocess, threading, time
-import shlex, tempfile
+import gdb, adb, readinput, adblog, getxre
+import os, sys, subprocess, threading, time, shlex, tempfile, pipes
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
 
     TASKS = (
         'Debug Fennec (default)',
+        'Debug content Mochitest',
         'Debug compiled-code unit test'
     )
     (
         TASK_FENNEC,
+        TASK_MOCHITEST,
         TASK_CPP_TEST
     ) = (
         0,
-        1
+        1,
+        2
     )
 
     def __init__(self):
@@ -220,9 +223,9 @@ class FenInit(gdb.Command):
                 acfile.close()
             except OSError:
                 pass
-        pkgs = [x[:x.rindex('-')] for x in \
-            adb.call(['shell', 'ls', '-1', '/data/app']).splitlines() \
-            if x.startswith('org.mozilla.')]
+        pkgs = [x.partition(':')[-1] for x in \
+            adb.call(['shell', 'pm', 'list', 'packages']).splitlines() \
+            if ':org.mozilla.' in x]
         if pkgs:
             print 'Found package names:'
             for pkg in pkgs:
@@ -571,6 +574,210 @@ class FenInit(gdb.Command):
 
         print '\nReady. Use "continue" to start execution.'
 
+    def _getTopSrcDir(self, objdir):
+        if objdir:
+            mkname = os.path.join(objdir, 'Makefile')
+            try:
+                mkfile = open(mkname)
+                for line in mkfile:
+                    if 'topsrcdir' not in line:
+                        continue
+                    mkfile.close()
+                    topsrcdir = line.partition('=')[2].strip()
+                    return topsrcdir
+                mkfile.close()
+            except OSError:
+                pass
+            topsrcdir = os.path.join(objdir, '..')
+            if os.path.isfile(os.path.join(topsrcdir, 'client.mk')):
+                return topsrcdir
+        return None
+
+    # returns (env, test, args)
+    def _chooseMochitest(self, objdir):
+        topsrcdir = self._getTopSrcDir(objdir)
+        rootdir = topsrcdir if topsrcdir else os.getcwd()
+        mochipath = ''
+        def parseMochitest(cmd):
+            cmd = os.path.expandvars(cmd)
+            try:
+                comps = shlex.split(cmd)
+                # mochi_env is a user-defined variable
+                if hasattr(self, 'mochi_env') and self.mochi_env:
+                    envcomps = shlex.split(os.path.expandvars(self.mochi_env))
+                    envcomps.extend(comps)
+                    comps = envcomps
+            except ValueError as e:
+                print str(e)
+                return ([], '', [])
+            for i in range(len(comps)):
+                if '=' in comps[i]:
+                    continue
+                return (comps[0: i], comps[i], comps[(i+1):])
+            return (comps, '', [])
+        while not os.path.isfile(mochipath) and \
+              not os.path.isdir(mochipath):
+            print 'Enter path of Mochitest (file or directory; ' \
+                  'use tab-completion to see possibilities)'
+            if topsrcdir:
+                print '    path can be relative to the ' \
+                      'source directory or absolute'
+            print '    Fennec environment variables and ' \
+                  'test harness arguments are supported'
+            print '    e.g. NSPR_LOG_MODULES=all:5 test_foo_bar.html ' \
+                  '--remote-webserver=0.0.0.0'
+            mochipath = readinput.call(': ', '-f', '-c', rootdir,
+                           '--file-mode', '0100',
+                           '--file-mode-mask', '0000')
+            mochienv, mochipath, mochiargs = parseMochitest(mochipath)
+            mochipath = os.path.normpath(os.path.join(rootdir,
+                                         os.path.expanduser(mochipath)))
+            print ''
+        if hasattr(self, 'mochi_args') and self.mochi_args:
+            argscomps = shlex.split(os.path.expandvars(self.mochi_args))
+            argscomps.extend(mochiargs)
+            mochiargs = argscomps
+        return ([s.partition('=')[0] + '=' + repr(s.partition('=')[-1])
+                       for s in mochienv], mochipath, mochiargs)
+
+    def _getXREDir(self, datadir):
+        def checkXREDir(xredir):
+            if os.path.isfile(os.path.join(xredir, 'bin', 'xpcshell')):
+                return os.path.join(xredir, 'bin')
+            if os.path.isfile(os.path.join(xredir, 'xpcshell')):
+                return xredir
+            if os.path.isfile(xredir):
+                return os.path.dirname(xredir)
+            return None
+
+        if hasattr(self, 'mochi_xre') and self.mochi_xre:
+            xredir = checkXREDir(os.path.expandvars(
+                                 os.path.expanduser(self.mochi_xre)))
+            if xredir:
+                return os.path.abspath(xredir)
+            print 'mochi_xre directory does not contain xpcshell'
+        xredatadir = os.path.abspath(
+                     os.path.join(datadir, os.path.pardir, 'xre'))
+        xredir = checkXREDir(xredatadir)
+        while not xredir:
+            print 'Enter path of XRE directory containing xpcshell,'
+            print ' or leave blank to download from ftp.mozilla.org (~100MB)'
+            xredir = readinput.call(': ', '-d')
+            print ''
+            if not xredir:
+                getxre.call(xredatadir)
+                xredir = xredatadir
+            xredir = checkXREDir(xredir)
+        return os.path.abspath(xredir)
+
+    def _launchMochitest(self, pkg, objdir, xredir, sutenv, test, args):
+        env = dict(os.environ)
+        adbpath = str(gdb.parameter('adb-path'))
+        if os.path.dirname(adbpath):
+            # Mochitest harness only uses 'adb' to invoke adb
+            env['PATH'] = ((env['PATH'] + os.path.pathsep)
+                          if 'PATH' in env else '') + os.path.dirname(adbpath)
+        dev = str(gdb.parameter('adb-device'))
+        if dev:
+            env['ANDROID_SERIAL'] = dev
+        topsrcdir = self._getTopSrcDir(objdir)
+
+        if objdir and os.path.isfile(os.path.join(objdir, 'Makefile')) and \
+                      os.path.isdir(os.path.join(objdir, 'testing')):
+            # use `make mochitest-remote`
+            exe = ['make', '-C', objdir, 'mochitest-remote']
+            env['DM_TRANS'] = 'adb'
+            if pkg:
+                env['TEST_PACKAGE_NAME'] = pkg
+            env['MOZ_HOST_BIN'] = xredir
+            if not topsrcdir:
+                topsrcdir = os.path.join(objdir, os.path.pardir)
+            env['TEST_PATH'] = os.path.relpath(test, topsrcdir)
+            testargs = ['--setenv=' + pipes.quote(s) for s in sutenv]
+            testargs.extend([pipes.quote(s) for s in args])
+            env['EXTRA_TEST_ARGS'] = ' '.join(testargs)
+        else:
+            # use `python runtestsremote.py`
+            script = 'runtestsremote.py'
+            def checkHarness(harness):
+                while not os.path.isfile(os.path.join(harness, script)):
+                    harness = os.path.normpath(
+                              os.path.join(harness, os.path.pardir))
+                    if os.path.ismount(harness):
+                        return None
+                return os.path.normpath(harness)
+            harness = checkHarness(test)
+            if not harness:
+                harness = checkHarness(os.path.join(xredir, os.path.pardir,
+                                                    'mochitest'))
+            if not harness and hasattr(self, 'mochi_harness') \
+                           and self.mochi_harness:
+                harness = checkHarness(self.mochi_harness)
+            while not harness:
+                harness = readinput.call('Enter "' + script + '" path: ', '-f')
+            if not topsrcdir:
+                testsdir = os.path.sep + 'tests' + os.path.sep
+                testsidx = test.rfind(testsdir)
+                if testsidx >= 0:
+                    topsrcdir = test[0: testsidx + len(testsdir)]
+                else:
+                    topsrcdir = os.path.join(harness, 'tests')
+            exe = [sys.executable, os.path.join(harness, script),
+                   '--autorun', '--close-when-done', '--deviceIP=',
+                   '--console-level=INFO', '--file-level=INFO',
+                   '--dm_trans=adb', '--app=' + pkg, '--xre-path=' + xredir,
+                   '--test-path=' + os.path.relpath(test, topsrcdir)]
+            exe.extend(['--setenv=' + pipes.quote(s) for s in sutenv])
+            exe.extend(args)
+
+        # run this before exec() so child doesn't get gdb's signals
+        print 'Launching Mochitest... '
+        def exePreExec():
+            os.setpgrp()
+        proc = subprocess.Popen(exe, stdin=subprocess.PIPE,
+                                stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE,
+                                preexec_fn=exePreExec, env=env)
+
+        # collect output in another thread
+        def makeOutputWait(obj, proc):
+            def outputWait():
+                while proc.poll() == None:
+                    line = proc.stdout.readline()
+                    if not line:
+                        break
+                    if 'INFO' in line and \
+                        ('TEST-PASS' in line or 'TEST-KNOWN-FAIL' in line):
+                        # don't log passing tests
+                        continue
+                    if line.startswith('----') and '/dev/log' in line:
+                        # start of log dump
+                        proc.communicate()
+                        break
+                    if obj._launchwaiting or adblog.continuing:
+                        sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
+            return outputWait;
+        self._launchwaiting = True
+        outThd = threading.Thread(
+                name = 'Mochitest',
+                target = makeOutputWait(self, proc))
+        outThd.daemon = True
+        outThd.start()
+
+        # start waiting
+        ps = adb.call(['shell', 'ps']).splitlines()
+        pkgProcs = [x for x in ps if pkg in x.split()]
+        while not pkgProcs:
+            time.sleep(1)
+            if proc.poll():
+                raise gdb.GdbError('Test harness exited '
+                                   'without launching Fennec.')
+            ps = adb.call(['shell', 'ps']).splitlines()
+            pkgProcs = [x for x in ps if pkg in x.split() and
+                    ('S' in x.split() or 'T' in x.split())]
+        self._launchwaiting = False
+        return proc
+
     def invoke(self, argument, from_tty):
         try:
             saved_height = gdb.parameter('height')
@@ -581,18 +788,31 @@ class FenInit(gdb.Command):
                     print 'Already in remote debug mode.'
                     return
                 delattr(self, 'gdbserver')
-            self._chooseTask()
+            if hasattr(self, '_mochitest') and self._mochitest:
+                if self._mochitest.poll() is None:
+                    print 'Already in remote Mochitest mode.'
+                    return
+                delattr(self, '_mochitest')
+            self._task = self._chooseTask()
             self._chooseDevice()
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
             
-            pkg = self._getPackageName(self.objdir)
-            if self.task == self.TASK_FENNEC:
+            datadir = str(gdb.parameter('data-directory'))
+            objdir = self.objdir
+            pkg = self._getPackageName(objdir)
+            if self._task == self.TASK_FENNEC:
                 no_launch = hasattr(self, 'no_launch') and self.no_launch
                 if not no_launch:
                     self._launch(pkg)
                 self._attach(pkg)
-            elif self.task == self.TASK_CPP_TEST:
+            elif self._task == self.TASK_MOCHITEST:
+                xredir = self._getXREDir(datadir)
+                env, test, args = self._chooseMochitest(objdir)
+                self._mochitest = self._launchMochitest(
+                        pkg, objdir, xredir, env, test, args)
+                self._attach(pkg)
+            elif self._task == self.TASK_CPP_TEST:
                 self._chooseCpp()
                 self._prepareCpp(pkg)
                 self._attachCpp(pkg)
@@ -605,6 +825,11 @@ class FenInit(gdb.Command):
                     self.gdbserver.terminate()
                     print 'Terminated gdbserver.'
                 delattr(self, 'gdbserver')
+            if hasattr(self, '_mochitest') and self._mochitest:
+                if self._mochitest.poll() is None:
+                    self._mochitest.terminate()
+                    print 'Terminated Mochitest.'
+                delattr(self, '_mochitest')
             raise
         finally:
             gdb.execute('set height ' + str(saved_height), False, False)
