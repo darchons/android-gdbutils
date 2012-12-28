@@ -42,9 +42,12 @@ if __name__ == '__main__': # not module
     import readline, shlex
     from optparse import OptionParser
 
-    readline.parse_and_bind('tab: complete')
-    readline.parse_and_bind('set bell-style none')
-    readline.parse_and_bind('set completion-ignore-case on')
+    if 'libedit' in readline.__doc__:
+        readline.parse_and_bind('bind ^I rl_complete')
+    else:
+        readline.parse_and_bind('tab: complete')
+        readline.parse_and_bind('set bell-style none')
+        readline.parse_and_bind('set completion-ignore-case on')
     readline.set_completer()
 
     def safeSplit(text):
@@ -57,42 +60,70 @@ if __name__ == '__main__': # not module
                 return trySplit(text, closing[1:])
         return trySplit(text, ['', '"', "'"])
 
+    PATH_DELIMS = [os.path.sep, '\t', ' ']
+    DEFAULT_DELIMS = ['\t', ' ', '"', "'"]
+
+    def getLine():
+        buf = readline.get_line_buffer()
+        idx = readline.get_endidx()
+        if 'libedit' not in readline.__doc__:
+            return '', buf[0: idx], ''
+        prestart = max(buf.rfind(c, 0, idx) for c in DEFAULT_DELIMS) + 1
+        preend = max(buf.rfind(c, 0, idx) for c in PATH_DELIMS) + 1
+        poststart = min(buf.find(c, idx + 1) if buf.count(c, idx + 1)
+                        else len(buf) - 1 for c in PATH_DELIMS) + 1
+        postend = min(buf.find(c, idx + 1) if buf.count(c, idx + 1)
+                      else len(buf) - 1 for c in DEFAULT_DELIMS) + 1
+        return buf[prestart: preend], \
+               buf[preend: poststart], \
+               buf[poststart: postend]
+
     def dirComplete(text, state):
-        comps = safeSplit(readline.get_line_buffer()[0: readline.get_endidx()])
+        pre, word, post = getLine()
+        comps = safeSplit(pre + word)
         path = comps[-1] if comps else ''
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
         abspath = os.path.abspath(os.path.expanduser(dirname))
         for d in os.listdir(abspath):
-            if not d.lower().startswith(basename.lower()):
-                continue
+            if 'libedit' not in readline.__doc__:
+                if not d.lower().startswith(basename.lower()):
+                    continue
+            else:
+                if not d.startswith(basename):
+                    continue
             if d.startswith('.') and not basename.startswith('.'):
                 continue
             if not os.path.isdir(os.path.join(abspath, d)):
                 continue
             if not state:
-                return d + os.path.sep
+                return pre + d + os.path.sep + post
             state -= 1
         return None
 
     def fileComplete(text, state):
-        comps = safeSplit(readline.get_line_buffer()[0: readline.get_endidx()])
+        pre, word, post = getLine()
+        comps = safeSplit(pre + word)
         path = comps[-1] if comps else ''
         basename = os.path.basename(path)
         dirname = os.path.dirname(path)
         abspath = os.path.abspath(os.path.expanduser(dirname))
         for f in os.listdir(abspath):
-            if not f.lower().startswith(basename.lower()):
-                continue
+            if 'libedit' not in readline.__doc__:
+                if not f.lower().startswith(basename.lower()):
+                    continue
+            else:
+                if not f.startswith(basename):
+                    continue
             if f.startswith('.') and not basename.startswith('.'):
                 continue
             if os.path.isdir(os.path.join(abspath, f)):
                 if not state:
-                    return f + os.path.sep
+                    return pre + f + os.path.sep + post
                 state -= 1
             elif os.stat(os.path.join(abspath, f)).st_mode & fmm == fm:
                 if not state:
-                    return f
+                    return pre + f + post
                 state -= 1
         return None
 
@@ -116,10 +147,16 @@ if __name__ == '__main__': # not module
         readline.set_completer_delims('')
         readline.set_completer(listComplete)
     elif hasattr(args, 'd') and args.d:
-        readline.set_completer_delims('\t ' + os.path.sep)
+        if 'libedit' in readline.__doc__:
+            readline.set_completer_delims(''.join(DEFAULT_DELIMS))
+        else:
+            readline.set_completer_delims(''.join(PATH_DELIMS))
         readline.set_completer(dirComplete)
     elif hasattr(args, 'f') and args.f:
-        readline.set_completer_delims('\t ' + os.path.sep)
+        if 'libedit' in readline.__doc__:
+            readline.set_completer_delims(''.join(DEFAULT_DELIMS))
+        else:
+            readline.set_completer_delims(''.join(PATH_DELIMS))
         readline.set_completer(fileComplete)
     curdir = None
     if hasattr(args, 'c') and args.c:
