@@ -497,8 +497,8 @@ class FenInit(gdb.Command):
             print '    environmental variables and arguments are supported'
             print '    e.g. FOO=bar TestFooBar arg1 arg2'
             cpppath = readinput.call(': ', '-f', '-c', rootdir,
-                           '--file-mode', '0100',
-                           '--file-mode-mask', '0100')
+                           '--file-mode', '0o100',
+                           '--file-mode-mask', '0o100')
             cppenv, cpppath, cppargs = parseCpp(cpppath)
             cpppath = os.path.normpath(os.path.join(rootdir,
                                        os.path.expanduser(cpppath)))
@@ -626,8 +626,8 @@ class FenInit(gdb.Command):
             print '    e.g. NSPR_LOG_MODULES=all:5 test_foo_bar.html ' \
                   '--remote-webserver=0.0.0.0'
             mochipath = readinput.call(': ', '-f', '-c', rootdir,
-                           '--file-mode', '0100',
-                           '--file-mode-mask', '0000')
+                           '--file-mode', '0o000',
+                           '--file-mode-mask', '0o100')
             mochienv, mochipath, mochiargs = parseMochitest(mochipath)
             mochipath = os.path.normpath(os.path.join(rootdir,
                                          os.path.expanduser(mochipath)))

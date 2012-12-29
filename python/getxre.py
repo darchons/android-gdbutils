@@ -151,7 +151,7 @@ if __name__ == '__main__': # not module
         testzip.close()
     os.remove(testdst)
     print 'Done'
-    os.chmod(os.path.join(xredir, 'bin', 'xpcshell'), 0755)
+    os.chmod(os.path.join(xredir, 'bin', 'xpcshell'), 0o755)
     print 'Downloaded XRE to ' + xredir
 
 else:
