@@ -504,7 +504,8 @@ class FenInit(gdb.Command):
                                        os.path.expanduser(cpppath)))
             print ''
         self.cpppath = cpppath
-        self.cppenv = [s.partition('=')[0] + '=' + repr(s.partition('=')[-1])
+        self.cppenv = [s.partition('=')[0] + '=' +
+                       pipes.quote(s.partition('=')[-1])
                        for s in cppenv]
         self.cppargs = cppargs
 
@@ -635,8 +636,9 @@ class FenInit(gdb.Command):
             argscomps = shlex.split(os.path.expandvars(self.mochi_args))
             argscomps.extend(mochiargs)
             mochiargs = argscomps
-        return ([s.partition('=')[0] + '=' + repr(s.partition('=')[-1])
-                       for s in mochienv], mochipath, mochiargs)
+        return ([s.partition('=')[0] + '=' +
+                 pipes.quote(s.partition('=')[-1])
+                 for s in mochienv], mochipath, mochiargs)
 
     def _getXREDir(self, datadir):
         def checkXREDir(xredir):
@@ -725,7 +727,7 @@ class FenInit(gdb.Command):
             if not topsrcdir:
                 topsrcdir = os.path.join(objdir, os.path.pardir)
             env['TEST_PATH'] = os.path.relpath(test, topsrcdir)
-            testargs = ['--setenv=' + pipes.quote(s) for s in sutenv]
+            testargs = ['--setenv=' + s for s in sutenv]
             testargs.extend([pipes.quote(s) for s in args])
             env['EXTRA_TEST_ARGS'] = ' '.join(testargs)
         else:
@@ -759,7 +761,7 @@ class FenInit(gdb.Command):
                    '--console-level=INFO', '--file-level=INFO',
                    '--dm_trans=adb', '--app=' + pkg, '--xre-path=' + xredir,
                    '--test-path=' + os.path.relpath(test, topsrcdir)]
-            exe.extend(['--setenv=' + pipes.quote(s) for s in sutenv])
+            exe.extend(['--setenv=' + s for s in sutenv])
             exe.extend(args)
 
         # run this before exec() so child doesn't get gdb's signals
