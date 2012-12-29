@@ -263,8 +263,7 @@ class FenInit(gdb.Command):
                 print ''
                 print out
                 raise gdb.GdbError('Error while launching %s.' % pkg)
-
-            # FIXME sleep for 1s to allow time to launch
+            # sleep for 1s to allow time to launch
             time.sleep(1)
 
     def _attach(self, pkg):
@@ -300,8 +299,9 @@ class FenInit(gdb.Command):
 
         # see if any gdbserver instance is running, and discard
         # the debuggee from our list because it's already taken
+        ps = adb.call(['shell', 'ps']).splitlines()
         for proc in [x.split() for x in ps if 'gdbserver' in x]:
-            # get the program being debugged by examine gdbserver cmdline
+            # get the program being debugged by examining gdbserver cmdline
             cmdline = adb.call(['shell', 'cat',
                     '/proc/' + next((col for col in proc if col.isdigit())) +
                     '/cmdline']).split('\0')
@@ -770,7 +770,7 @@ class FenInit(gdb.Command):
         # first kill off any running instance
         if self._getRunningProcs(pkg):
             adb.call(['shell', 'am', 'force-stop', pkg])
-            while self._getRunningProcs(pkg)
+            while self._getRunningProcs(pkg):
                 time.sleep(1)
 
         def exePreExec():
