@@ -36,7 +36,7 @@
 # ***** END LICENSE BLOCK *****
 
 import gdb, adb, readinput, adblog, getxre
-import os, sys, subprocess, threading, time, shlex, tempfile, pipes, shutil
+import os, sys, subprocess, threading, time, shlex, tempfile, pipes, shutil, re
 
 class FenInit(gdb.Command):
     '''Initialize gdb for debugging Fennec on Android'''
@@ -242,13 +242,17 @@ class FenInit(gdb.Command):
         print ''
         return pkg
 
+    def _getRunningProcs(self, pkg, waiting=False):
+        ps = adb.call(['shell', 'ps']).splitlines()
+        return [x for x in ps if pkg in re.split(r'[ \t/]', x) and
+                (not waiting or 'S' in x.split() or 'T' in x.split())]
+
     def _launch(self, pkg):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
 
-        ps = adb.call(['shell', 'ps']).splitlines()
-        # get parent/child processes that are waiting ('S' state)
-        pkgProcs = [x for x in ps if pkg in x]
+        # get parent/child processes
+        pkgProcs = self._getRunningProcs(pkg)
 
         if all([CHILD_EXECUTABLE in x for x in pkgProcs]):
             # launch
@@ -279,16 +283,12 @@ class FenInit(gdb.Command):
         else:
             CHILD_FILE_PATH = None
 
-        ps = adb.call(['shell', 'ps']).splitlines()
         # get parent/child processes that are waiting ('S' state)
-        pkgProcs = [x for x in ps if pkg in x]
+        pkgProcs = self._getRunningProcs(pkg, waiting=True)
 
         # wait for parent launch to complete
         while all([CHILD_EXECUTABLE in x for x in pkgProcs]):
-            ps = adb.call(['shell', 'ps']).splitlines()
-            # get parent/child processes that are waiting ('S' state)
-            pkgProcs = [x for x in ps if pkg in x and
-                    ('S' in x.split() or 'T' in x.split())]
+            pkgProcs = self._getRunningProcs(pkg, waiting=True)
         print 'Done'
 
         # get parent/child(ren) pid's
@@ -322,15 +322,13 @@ class FenInit(gdb.Command):
         elif not pidChild:
             # ok, no child is available. assume the user
             # wants to wait for child to start up
-            pkgProcs = None
+            pkgProcs = []
             print 'Waiting for child process...'
-            while not pkgProcs:
-                ps = adb.call(['shell', 'ps']).splitlines()
-                # check for 'S' state, for right parent, and for right child
-                pkgProcs = [x for x in ps if ('S' in x or 'T' in x) and \
-                        pidChildParent in x and CHILD_EXECUTABLE in x]
+            while not any(pidChildParent in x and
+                          CHILD_EXECUTABLE in x for x in pkgProcs):
+                pkgProcs = self._getRunningProcs(pkg, waiting=True)
             pidChild = [next((col for col in x.split() if col.isdigit()))
-                    for x in pkgProcs]
+                        for x in pkgProcs]
 
         # if the parent was not picked, pick the right child
         if not pidParent and len(pidChild) == 1:
@@ -511,16 +509,14 @@ class FenInit(gdb.Command):
         self.cppargs = cppargs
 
     def _prepareCpp(self, pkg):
-        ps = adb.call(['shell', 'ps']).splitlines()
-        pkgProcs = [x for x in ps if pkg in x]
+        pkgProcs = self._getRunningProcs(pkg)
         if pkgProcs:
             sys.stdout.write('Restarting %s... ' % pkg);
             sys.stdout.flush()
             adb.call(['shell', 'am', 'force-stop', pkg])
             # wait for fennec to stop
             while pkgProcs:
-                ps = adb.call(['shell', 'ps']).splitlines()
-                pkgProcs = [x for x in ps if pkg in x]
+                pkgProcs = self._getRunningProcs(pkg)
         else:
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
@@ -531,11 +527,11 @@ class FenInit(gdb.Command):
             print '\n' + out
             raise gdb.GdbError('Error while launching %s.' % pkg)
         else:
+            pkgProcs = None
             while not pkgProcs:
-                ps = adb.call(['shell', 'ps']).splitlines()
-                pkgProcs = [x for x in ps if pkg in x]
-            # FIXME sleep for 3s to allow time to launch
-            time.sleep(3)
+                pkgProcs = self._getRunningProcs(pkg, waiting=True)
+            # sleep for 2s to allow time to launch
+            time.sleep(2)
             print 'Done'
 
     def _attachCpp(self, pkg):
@@ -768,6 +764,13 @@ class FenInit(gdb.Command):
 
         # run this before exec() so child doesn't get gdb's signals
         print 'Launching Mochitest... '
+
+        # first kill off any running instance
+        if self._getRunningProcs(pkg):
+            adb.call(['shell', 'am', 'force-stop', pkg])
+            while self._getRunningProcs(pkg)
+                time.sleep(1)
+
         def exePreExec():
             os.setpgrp()
         proc = subprocess.Popen(exe, stdin=subprocess.PIPE,
@@ -801,16 +804,13 @@ class FenInit(gdb.Command):
         outThd.start()
 
         # start waiting
-        ps = adb.call(['shell', 'ps']).splitlines()
-        pkgProcs = [x for x in ps if pkg in x.split()]
+        pkgProcs = self._getRunningProcs(pkg, waiting=True)
         while not pkgProcs:
-            time.sleep(1)
+            time.sleep(2)
             if proc.poll():
                 raise gdb.GdbError('Test harness exited '
                                    'without launching Fennec.')
-            ps = adb.call(['shell', 'ps']).splitlines()
-            pkgProcs = [x for x in ps if pkg in x.split() and
-                    ('S' in x.split() or 'T' in x.split())]
+            pkgProcs = self._getRunningProcs(pkg, waiting=True)
         self._launchwaiting = False
         return proc
 
