@@ -510,14 +510,13 @@ class FenInit(gdb.Command):
         self.cppargs = cppargs
 
     def _prepareCpp(self, pkg):
-        pkgProcs = self._getRunningProcs(pkg)
-        if pkgProcs:
+        if self._getRunningProcs(pkg):
             sys.stdout.write('Restarting %s... ' % pkg);
             sys.stdout.flush()
-            adb.call(['shell', 'am', 'force-stop', pkg])
             # wait for fennec to stop
-            while pkgProcs:
-                pkgProcs = self._getRunningProcs(pkg)
+            while self._getRunningProcs(pkg):
+                adb.call(['shell', 'am', 'force-stop', pkg])
+                time.sleep(1)
         else:
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
@@ -769,8 +768,8 @@ class FenInit(gdb.Command):
 
         # first kill off any running instance
         if self._getRunningProcs(pkg):
-            adb.call(['shell', 'am', 'force-stop', pkg])
             while self._getRunningProcs(pkg):
+                adb.call(['shell', 'am', 'force-stop', pkg])
                 time.sleep(1)
 
         def exePreExec():
