@@ -247,6 +247,30 @@ class FenInit(gdb.Command):
         return [x for x in ps if pkg in re.split(r'[ \t/]', x) and
                 (not waiting or 'S' in x.split() or 'T' in x.split())]
 
+    def _killRunningProcs(self, pkg):
+        pkgProcs = self._getRunningProcs(pkg)
+        if not pkgProcs:
+            return
+
+        adb.call(['shell', 'am', 'force-stop', pkg])
+        time.sleep(3)
+        pkgProcs = self._getRunningProcs(pkg)
+        if not pkgProcs:
+            return
+
+        for p in pkgProcs:
+            adb.call(['run-as', pkg, 'kill', '-9',
+                      next(c for c in p.split() if c.isdigit())])
+        time.sleep(2)
+        pkgProcs = self._getRunningProcs(pkg)
+        if not pkgProcs:
+            return
+
+        for p in pkgProcs:
+            print p
+        raise gdb.GdbError(
+            'Could not kill running %s process.' % pkg)
+
     def _launch(self, pkg):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
@@ -514,9 +538,7 @@ class FenInit(gdb.Command):
             sys.stdout.write('Restarting %s... ' % pkg);
             sys.stdout.flush()
             # wait for fennec to stop
-            while self._getRunningProcs(pkg):
-                adb.call(['shell', 'am', 'force-stop', pkg])
-                time.sleep(1)
+            self._killRunningProcs(pkg)
         else:
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
@@ -767,10 +789,7 @@ class FenInit(gdb.Command):
         print 'Launching Mochitest... '
 
         # first kill off any running instance
-        if self._getRunningProcs(pkg):
-            while self._getRunningProcs(pkg):
-                adb.call(['shell', 'am', 'force-stop', pkg])
-                time.sleep(1)
+        self._killRunningProcs(pkg)
 
         def exePreExec():
             os.setpgrp()
