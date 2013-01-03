@@ -798,7 +798,19 @@ class FenInit(gdb.Command):
                                 stderr=subprocess.PIPE,
                                 preexec_fn=exePreExec, env=env)
 
-        # collect output in another thread
+        line = proc.stdout.readline()
+        while line and proc.poll() == None:
+            print '\x1B[1mout> \x1B[22m' + line.strip()
+            if 'INFO' in line and 'application pid' in line.lower():
+                # test launched
+                break
+            line = proc.stdout.readline()
+
+        if not line or proc.poll():
+            raise gdb.GdbError('Test harness exited '
+                               'without launching Fennec.')
+
+        # collect further output in another thread
         def makeOutputWait(obj, proc):
             def outputWait():
                 while proc.poll() == None:
@@ -813,25 +825,14 @@ class FenInit(gdb.Command):
                         # start of log dump
                         proc.communicate()
                         break
-                    if obj._launchwaiting or adblog.continuing:
+                    if adblog.continuing:
                         sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
             return outputWait;
-        self._launchwaiting = True
         outThd = threading.Thread(
                 name = 'Mochitest',
                 target = makeOutputWait(self, proc))
         outThd.daemon = True
         outThd.start()
-
-        # start waiting
-        pkgProcs = self._getRunningProcs(pkg, waiting=True)
-        while not pkgProcs:
-            time.sleep(2)
-            if proc.poll():
-                raise gdb.GdbError('Test harness exited '
-                                   'without launching Fennec.')
-            pkgProcs = self._getRunningProcs(pkg, waiting=True)
-        self._launchwaiting = False
         return proc
 
     def invoke(self, argument, from_tty):
