@@ -258,14 +258,22 @@ class FenInit(gdb.Command):
         if not pkgProcs:
             return
 
-        for p in pkgProcs:
-            adb.call(['run-as', pkg, 'kill', '-9',
-                      next(c for c in p.split() if c.isdigit())])
-        time.sleep(2)
+        try:
+            # try twice
+            for i in range(2):
+                for p in pkgProcs:
+                    adb.call(['shell', 'run-as', pkg, 'kill', '-9',
+                              next(c for c in p.split() if c.isdigit())])
+                time.sleep(2)
+                pkgProcs = self._getRunningProcs(pkg)
+                if not pkgProcs:
+                    return
+        except:
+            pass
+
         pkgProcs = self._getRunningProcs(pkg)
         if not pkgProcs:
             return
-
         for p in pkgProcs:
             print p
         raise gdb.GdbError(
@@ -802,6 +810,7 @@ class FenInit(gdb.Command):
         while line and proc.poll() == None:
             print '\x1B[1mout> \x1B[22m' + line.strip()
             if 'INFO' in line and 'application pid' in line.lower():
+                time.sleep(2)
                 # test launched
                 break
             line = proc.stdout.readline()
