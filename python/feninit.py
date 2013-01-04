@@ -390,8 +390,6 @@ class FenInit(gdb.Command):
                 (PARENT_FILE_PATH if pidParent else CHILD_FILE_PATH),
                 ['--once', '--attach', gdbserver_port, pidAttach])
 
-        if pidParent:
-            print '\nRun another gdb session to debug child process.'
         print '\nReady. Use "continue" to resume execution.'
 
     def _attachGDBServer(self, pkg, filePath, args,
