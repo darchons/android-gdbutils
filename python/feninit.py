@@ -661,8 +661,8 @@ class FenInit(gdb.Command):
         mochipath = ''
         while not os.path.isfile(mochipath) and \
               not os.path.isdir(mochipath):
-            print 'Enter path of Mochitest (file or directory; ' \
-                  'use tab-completion to see possibilities)'
+            print 'Enter path of Mochitest (file or directory)'
+            print '    use tab-completion to see possibilities'
             if topsrcdir:
                 print '    path can be relative to the ' \
                       'source directory or absolute'
