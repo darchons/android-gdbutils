@@ -43,17 +43,20 @@ class FenInit(gdb.Command):
 
     TASKS = (
         'Debug Fennec (default)',
+        'Debug Fennec with env vars and args',
         'Debug content Mochitest',
         'Debug compiled-code unit test'
     )
     (
         TASK_FENNEC,
+        TASK_FENNEC_ENV,
         TASK_MOCHITEST,
         TASK_CPP_TEST
     ) = (
         0,
         1,
-        2
+        2,
+        3
     )
 
     def __init__(self):
@@ -279,6 +282,15 @@ class FenInit(gdb.Command):
         raise gdb.GdbError(
             'Could not kill running %s process.' % pkg)
 
+    def _chooseEnvVars(self):
+        print 'Enter environmental variables and arguments'
+        print '    e.g. NSPR_LOG_MODULES=all:5 www.mozilla.org -profile <dir>'
+        cmd = readinput.call(': ')
+        env, cmd, args = self.parseCommand(cmd,
+            self.env if hasattr(self, 'env') and self.env else None,
+            self.args if hasattr(self, 'args') and self.args else None, False)
+        return (self.quoteEnv(env), args)
+
     def _launch(self, pkg):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
@@ -290,7 +302,19 @@ class FenInit(gdb.Command):
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
             sys.stdout.flush()
-            out = adb.call(['shell', 'am', 'start', '-n', pkg + '/.App'])
+            args = ['shell', 'am', 'start', '-n', pkg + '/.App']
+            if hasattr(self, '_env') and self._env:
+                envcount = 0
+                for envvar in self._env:
+                    args += ['--es', 'env' + str(envcount), envvar]
+                    envcount += 1
+            if hasattr(self, '_args') and self._args:
+                if not self._args[0].startswith('-'):
+                    # assume data URI
+                    args += ['-d', self._args.pop(0)]
+                args += ['--es', 'args', ' '.join(
+                    [pipes.quote(s) for s in self._args])]
+            out = adb.call(args)
             if 'error' in out.lower():
                 print ''
                 print out
@@ -499,27 +523,38 @@ class FenInit(gdb.Command):
         gdb.execute('target remote :' + port, False, True)
         print 'Done'
 
+    # returns (env, cmd, args)
+    def parseCommand(self, cmd, extra_env=None, extra_args=None, has_cmd=True):
+        try:
+            comps = shlex.split(cmd)
+            # cpp_env is a user-defined variable
+            # cppenv is an internal variable
+            if extra_env:
+                comps = shlex.split(extra_env) + comps
+            if extra_args:
+                comps += shlex.split(extra_args)
+        except ValueError as e:
+            print str(e)
+            return ([], '', [])
+        comps = [os.path.expandvars(s) for s in comps]
+        for i in range(len(comps)):
+            if '=' in comps[i]:
+                continue
+            if has_cmd:
+                return (comps[0: i], comps[i], comps[(i+1):])
+            return (comps[0: i], '', comps[i:])
+        return (comps, '', [])
+
+    def quoteEnv(self, env):
+        def _quote(s):
+            comps = s.partition('=')
+            return comps[0] + '=' + pipes.quote(comps[-1])
+        return [_quote(s) for s in env]
+
     def _chooseCpp(self):
         rootdir = os.path.join(self.objdir, 'dist', 'bin') \
                   if self.objdir else os.getcwd()
         cpppath = ''
-        def parseCpp(cmd):
-            try:
-                comps = shlex.split(cmd)
-                # cpp_env is a user-defined variable
-                # cppenv is an internal variable
-                if hasattr(self, 'cpp_env'):
-                    envcomps = shlex.split(self.cpp_env)
-                    envcomps.extend(comps)
-                    comps = envcomps
-            except ValueError as e:
-                print str(e)
-                return ([], '', [])
-            for i in range(len(comps)):
-                if '=' in comps[i]:
-                    continue
-                return (comps[0: i], comps[i], comps[(i+1):])
-            return (comps, '', [])
         while not os.path.isfile(cpppath):
             print 'Enter path of unit test ' \
                   '(use tab-completion to see possibilities)'
@@ -530,14 +565,13 @@ class FenInit(gdb.Command):
             cpppath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o100',
                            '--file-mode-mask', '0o100')
-            cppenv, cpppath, cppargs = parseCpp(cpppath)
+            cppenv, cpppath, cppargs = self.parseCommand(cpppath, self.cpp_env
+                if hasattr(self, 'cpp_env') and self.cpp_env else None)
             cpppath = os.path.normpath(os.path.join(rootdir,
                                        os.path.expanduser(cpppath)))
             print ''
         self.cpppath = cpppath
-        self.cppenv = [s.partition('=')[0] + '=' +
-                       pipes.quote(s.partition('=')[-1])
-                       for s in cppenv]
+        self.cppenv = self.quoteEnv(cppenv)
         self.cppargs = cppargs
 
     def _prepareCpp(self, pkg):
@@ -581,7 +615,7 @@ class FenInit(gdb.Command):
             lines.append('export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:' +
                          libPath + ':' + cachePath)
             lines.append('exec $@')
-            f.writelines('\n'.join(lines))
+            f.write('\n'.join(lines))
             tmpname = f.name
         adb.push(tmpname, wrapperPath)
         adb.call(['shell', 'chmod', '755', wrapperPath])
@@ -625,23 +659,6 @@ class FenInit(gdb.Command):
         topsrcdir = self._getTopSrcDir(objdir)
         rootdir = topsrcdir if topsrcdir else os.getcwd()
         mochipath = ''
-        def parseMochitest(cmd):
-            cmd = os.path.expandvars(cmd)
-            try:
-                comps = shlex.split(cmd)
-                # mochi_env is a user-defined variable
-                if hasattr(self, 'mochi_env') and self.mochi_env:
-                    envcomps = shlex.split(os.path.expandvars(self.mochi_env))
-                    envcomps.extend(comps)
-                    comps = envcomps
-            except ValueError as e:
-                print str(e)
-                return ([], '', [])
-            for i in range(len(comps)):
-                if '=' in comps[i]:
-                    continue
-                return (comps[0: i], comps[i], comps[(i+1):])
-            return (comps, '', [])
         while not os.path.isfile(mochipath) and \
               not os.path.isdir(mochipath):
             print 'Enter path of Mochitest (file or directory; ' \
@@ -656,17 +673,15 @@ class FenInit(gdb.Command):
             mochipath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o000',
                            '--file-mode-mask', '0o100')
-            mochienv, mochipath, mochiargs = parseMochitest(mochipath)
+            mochienv, mochipath, mochiargs = self.parseCommand(mochipath,
+                self.mochi_env if hasattr(self, 'mochi_env')
+                    and self.mochi_env else None,
+                self.mochi_args if hasattr(self, 'mochi_args')
+                    and self.mochi_args else None)
             mochipath = os.path.normpath(os.path.join(rootdir,
                                          os.path.expanduser(mochipath)))
             print ''
-        if hasattr(self, 'mochi_args') and self.mochi_args:
-            argscomps = shlex.split(os.path.expandvars(self.mochi_args))
-            argscomps.extend(mochiargs)
-            mochiargs = argscomps
-        return ([s.partition('=')[0] + '=' +
-                 pipes.quote(s.partition('=')[-1])
-                 for s in mochienv], mochipath, mochiargs)
+        return (mochienv, mochipath, mochiargs)
 
     def _getXREDir(self, datadir):
         def checkXREDir(xredir):
@@ -755,7 +770,7 @@ class FenInit(gdb.Command):
             if not topsrcdir:
                 topsrcdir = os.path.join(objdir, os.path.pardir)
             env['TEST_PATH'] = os.path.relpath(test, topsrcdir)
-            testargs = ['--setenv=' + s for s in sutenv]
+            testargs = ['--setenv=' + s for s in self.quoteEnv(sutenv)]
             testargs.extend([pipes.quote(s) for s in args])
             env['EXTRA_TEST_ARGS'] = ' '.join(testargs)
         else:
@@ -866,7 +881,12 @@ class FenInit(gdb.Command):
             datadir = str(gdb.parameter('data-directory'))
             objdir = self.objdir
             pkg = self._getPackageName(objdir)
-            if self._task == self.TASK_FENNEC:
+            if (self._task == self.TASK_FENNEC or
+                self._task == self.TASK_FENNEC_ENV):
+                if self._task == self.TASK_FENNEC_ENV:
+                    self._env, self._args = self._chooseEnvVars()
+                else:
+                    self._env, self._args = [], []
                 no_launch = hasattr(self, 'no_launch') and self.no_launch
                 if not no_launch:
                     self._launch(pkg)

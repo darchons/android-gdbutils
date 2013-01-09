@@ -64,7 +64,19 @@ python import feninit, tracebt, fastload, adblog
 
 #python feninit.default.gdbserver_port = 5039
 
-# set feninit.default.cpp_env to set environmental variables for
+# set feninit.default.env to set environment variables for
+#   debugging Fennec; only applicable when specifically using the
+#   "Debug Fennec with env vars and args" option
+
+#python feninit.default.env = 'FOO=bar BAR="foo bar"'
+
+# set feninit.default.args to set arguments for debugging
+#   Fennec; only applicable when specifically using the
+#   "Debug Fennec with env vars and args" option
+
+#python feninit.default.args = '--arg1 foo --arg2 bar'
+
+# set feninit.default.cpp_env to set environment variables for
 #   debugging compiled-code unit tests
 
 #python feninit.default.cpp_env = 'FOO=bar BAR="foo bar"'
