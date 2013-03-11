@@ -132,6 +132,13 @@ define dump-jni-refs
     call dvmDumpJniReferenceTables()
 end
 
+# Add a command for dumping the gecko profiler's pseudo-stack.
+# This sometimes provides useful information if gdb can't generate
+# a backtrace.
+define dump-pseudo-stack
+    call mozilla_sampler_print_location()
+end
+
 feninit
 fastload quick
 
