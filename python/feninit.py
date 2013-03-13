@@ -218,7 +218,7 @@ class FenInit(gdb.Command):
         gdb.execute('set sysroot ' + libdir, False, True)
         print 'Set sysroot to "%s".' % libdir
 
-        searchPaths = [os.path.join(libdir, os.path.sep.join(d)) \
+        searchPaths = [os.path.join(libdir, os.path.join(*d)) \
                 for d in DEFAULT_SEARCH_PATHS]
         if self.objdir:
             searchPaths.append(os.path.join(self.objdir, 'dist', 'bin'))
@@ -312,10 +312,10 @@ class FenInit(gdb.Command):
         # get parent/child processes
         pkgProcs = self._getRunningProcs(pkg)
 
+        sys.stdout.write('Launching %s... ' % pkg)
+        sys.stdout.flush()
         if all([CHILD_EXECUTABLE in x for x in pkgProcs]):
             # launch
-            sys.stdout.write('Launching %s... ' % pkg)
-            sys.stdout.flush()
             args = ['shell', 'am', 'start', '-n', pkg + '/.App']
             if hasattr(self, '_env') and self._env:
                 envcount = 0
@@ -477,6 +477,7 @@ class FenInit(gdb.Command):
             while not any(pidChildParent in x and
                           CHILD_EXECUTABLE in x for x in pkgProcs):
                 pkgProcs = self._getRunningProcs(pkg, waiting=True)
+                time.sleep(1)
             pidChild = [next((col for col in x.split() if col.isdigit()))
                         for x in pkgProcs]
 
@@ -599,7 +600,7 @@ class FenInit(gdb.Command):
                         break
                     if adblog.continuing:
                         sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
-            return gdbserverWait;
+            return gdbserverWait
         gdbserverThd = threading.Thread(
                 name = 'GDBServer',
                 target = makeGdbserverWait(self, gdbserverProc))
@@ -670,7 +671,7 @@ class FenInit(gdb.Command):
 
     def _prepareCpp(self, pkg):
         if self._getRunningProcs(pkg):
-            sys.stdout.write('Restarting %s... ' % pkg);
+            sys.stdout.write('Restarting %s... ' % pkg)
             sys.stdout.flush()
             # wait for fennec to stop
             self._killRunningProcs(pkg)
@@ -944,7 +945,7 @@ class FenInit(gdb.Command):
                         break
                     if adblog.continuing:
                         sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
-            return outputWait;
+            return outputWait
         outThd = threading.Thread(
                 name = 'Mochitest',
                 target = makeOutputWait(self, proc))
