@@ -64,6 +64,11 @@ python import feninit, tracebt, fastload, adblog
 
 #python feninit.default.gdbserver_port = 5039
 
+# set feninit.default.jdwp_port to use a specific port for
+#   connecting to jdwp, instead of a port based on the process id
+
+#python feninit.default.jdwp_port = 5040
+
 # set feninit.default.env to set environment variables for
 #   debugging Fennec; only applicable when specifically using the
 #   "Debug Fennec with env vars and args" option

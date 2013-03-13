@@ -44,20 +44,17 @@ class FenInit(gdb.Command):
     TASKS = (
         'Debug Fennec (default)',
         'Debug Fennec with env vars and args',
+        'Debug using jdb',
         'Debug content Mochitest',
         'Debug compiled-code unit test'
     )
     (
         TASK_FENNEC,
         TASK_FENNEC_ENV,
+        TASK_JAVA,
         TASK_MOCHITEST,
         TASK_CPP_TEST
-    ) = (
-        0,
-        1,
-        2,
-        3
-    )
+    ) = tuple(range(len(TASKS)))
 
     def __init__(self):
         super(FenInit, self).__init__('feninit', gdb.COMMAND_SUPPORT)
@@ -66,6 +63,23 @@ class FenInit(gdb.Command):
         return gdb.COMPLETE_NONE
 
     def _chooseTask(self):
+        if ('SSH_CONNECTION' in os.environ and
+            os.environ['SSH_CONNECTION'] and
+            'ANDROID_ADB_SERVER_PORT' in os.environ and
+            os.environ['ANDROID_ADB_SERVER_PORT']):
+            gdbserver_set = hasattr(self, 'gdbserver_port') and \
+                            self.gdbserver_port
+            jdwp_set = hasattr(self, 'jdwp_port') and self.jdwp_port
+            if not gdbserver_set or not jdwp_set:
+                print '\n********'
+                print '* Pro-tip: you seem to be forwarding ADB through SSH'
+                if not gdbserver_set:
+                    print '* configure gdbserver_port in gdbinit to set the ' \
+                          'forwarding port for gdb debugging'
+                if not jdwp_set:
+                    print '* configure jdwp_port in gdbinit to set the ' \
+                          'forwarding port for jdb debugging'
+                print '********'
         print '\nFennec GDB utilities'
         print ' (edit utils/gdbinit file to change preferences)'
         for i in range(len(self.TASKS)):
@@ -322,7 +336,58 @@ class FenInit(gdb.Command):
             # sleep for 1s to allow time to launch
             time.sleep(1)
 
-    def _attach(self, pkg):
+    def _linkJavaSources(self, srcdir, objdir):
+        # top dir of symbolic links
+        targetdir = os.path.join(objdir, 'mobile', 'android', 'base', 'jdb')
+        if not os.path.isdir(targetdir):
+            os.makedirs(targetdir)
+        # list of already linked java files
+        knownSources = []
+        for dirpath, dirnames, filenames in os.walk(targetdir):
+            knownSources += [os.path.normpath(os.path.join(dirpath,
+                os.readlink(os.path.join(dirpath, filename))))
+                for filename in filenames]
+        # link to a single source file
+        def linkSource(filename):
+            target = None
+            with open(filename, 'r') as f:
+                for line in f:
+                    sline = line.split(';')[0].strip().split()
+                    if len(sline) != 2 or sline[0] != 'package':
+                        continue
+                    # create java-style source dirs
+                    target = os.path.join(*([targetdir] + sline[1].split('.')))
+                    if not os.path.isdir(target):
+                        os.makedirs(target)
+                    break
+            if not target:
+                return
+            # create relative symbolic link
+            linkname = os.path.join(target, os.path.basename(filename))
+            linktarget = os.path.relpath(filename, target)
+            if not os.path.exists(linkname):
+                os.symlink(linktarget, linkname)
+        def linkSourceDir(root):
+            # skip 'classes' dir which contains only '.class' files
+            objdirclasses = os.path.join(objdir,
+                'mobile', 'android', 'base', 'classes')
+            for dirpath, dirnames, filenames in os.walk(root):
+                if dirpath.startswith(targetdir) or \
+                    dirpath.startswith(objdirclasses):
+                    continue
+                for filename in filenames:
+                    if not filename.endswith('.java'):
+                        continue
+                    filename = os.path.join(dirpath, filename)
+                    if filename in knownSources:
+                        return
+                    linkSource(filename)
+
+        linkSourceDir(os.path.join(srcdir, 'mobile', 'android', 'base'))
+        linkSourceDir(os.path.join(objdir, 'mobile', 'android', 'base'))
+        return targetdir
+
+    def _attach(self, pkg, use_jdb):
         # name of child binary
         CHILD_EXECUTABLE = 'plugin-container'
         # 'file' command argument for parent process
@@ -370,11 +435,40 @@ class FenInit(gdb.Command):
             elif pid in pidChild:
                 pidChild.remove(pid)
 
-        if pidParent:
+        if not use_jdb and pidParent:
             # the parent is not being debugged, pick the parent
             pidAttach = pidParent
-            sys.stdout.write('Attaching to parent (pid %s)... ' % pidAttach)
+            sys.stdout.write('Attaching to pid %s... ' % pidAttach)
             sys.stdout.flush()
+        elif use_jdb or (not pidChild and
+                        not (hasattr(self, 'no_jdb') and self.no_jdb)):
+            # ok, no child is available. assume the user wants to launch jdb
+            linkdir = None
+            objdir = self.objdir
+            srcdir = self._getTopSrcDir(objdir)
+            if objdir and srcdir:
+                print 'Creating source path links...'
+                linkdir = self._linkJavaSources(srcdir, objdir)
+            print 'Starting jdb for pid %s... ' % pidChildParent
+            with open(os.devnull,"w") as devnull:
+                if subprocess.call(['which', 'jdb'], stdout=devnull) != 0:
+                    print 'jdb not found. Please install jdb.'
+                    return
+            jdwp = adb.call(['jdwp']).splitlines()
+            if pidChildParent not in jdwp:
+                print ('%s process (%s) does not support jdwp.' %
+                    (pkg, pidChildParent))
+                return
+            jdwp_port = str(self.jdwp_port if hasattr(self, 'jdwp_port')
+                                           else (0x8000 | int(pidChildParent)))
+            adb.forward('tcp:' + jdwp_port, 'jdwp:' + pidChildParent)
+            sourcepath = []
+            print
+            jdb_args = ['jdb', '-attach', 'localhost:' + jdwp_port]
+            if linkdir:
+                jdb_args += ['-sourcepath', linkdir]
+            subprocess.call(jdb_args)
+            return
         elif not pidChild:
             # ok, no child is available. assume the user
             # wants to wait for child to start up
@@ -882,7 +976,8 @@ class FenInit(gdb.Command):
             objdir = self.objdir
             pkg = self._getPackageName(objdir)
             if (self._task == self.TASK_FENNEC or
-                self._task == self.TASK_FENNEC_ENV):
+                self._task == self.TASK_FENNEC_ENV or
+                self._task == self.TASK_JAVA):
                 if self._task == self.TASK_FENNEC_ENV:
                     self._env, self._args = self._chooseEnvVars()
                 else:
@@ -890,13 +985,13 @@ class FenInit(gdb.Command):
                 no_launch = hasattr(self, 'no_launch') and self.no_launch
                 if not no_launch:
                     self._launch(pkg)
-                self._attach(pkg)
+                self._attach(pkg, self._task == self.TASK_JAVA)
             elif self._task == self.TASK_MOCHITEST:
                 xredir = self._getXREDir(datadir)
                 env, test, args = self._chooseMochitest(objdir)
                 self._mochitest = self._launchMochitest(
                         pkg, objdir, xredir, env, test, args)
-                self._attach(pkg)
+                self._attach(pkg, False)
             elif self._task == self.TASK_CPP_TEST:
                 self._chooseCpp()
                 self._prepareCpp(pkg)
