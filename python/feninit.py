@@ -618,6 +618,8 @@ class FenInit(gdb.Command):
         rootdir = os.path.join(self.objdir, 'dist', 'bin') \
                   if self.objdir else os.getcwd()
         cpppath = ''
+        testpath = (os.environ['TEST_PATH']
+            if 'TEST_PATH' in os.environ else None)
         while not os.path.isfile(cpppath):
             print 'Enter path of unit test ' \
                   '(use tab-completion to see possibilities)'
@@ -625,9 +627,13 @@ class FenInit(gdb.Command):
                 print '    path can be relative to $objdir/dist/bin or absolute'
             print '    environmental variables and arguments are supported'
             print '    e.g. FOO=bar TestFooBar arg1 arg2'
+            if not testpath:
+                print 'Leave empty to use TEST_PATH (%s)' % testpath
             cpppath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o100',
                            '--file-mode-mask', '0o100')
+            if not cpppath and testpath:
+                cpppath = testpath
             cppenv, cpppath, cppargs = self.parseCommand(cpppath, self.cpp_env
                 if hasattr(self, 'cpp_env') and self.cpp_env else None)
             cpppath = os.path.normpath(os.path.join(rootdir,
@@ -722,6 +728,8 @@ class FenInit(gdb.Command):
         topsrcdir = self._getTopSrcDir(objdir)
         rootdir = topsrcdir if topsrcdir else os.getcwd()
         mochipath = ''
+        testpath = (os.environ['TEST_PATH']
+            if 'TEST_PATH' in os.environ else None)
         while not os.path.isfile(mochipath) and \
               not os.path.isdir(mochipath):
             print 'Enter path of Mochitest (file or directory)'
@@ -733,9 +741,13 @@ class FenInit(gdb.Command):
                   'test harness arguments are supported'
             print '    e.g. NSPR_LOG_MODULES=all:5 test_foo_bar.html ' \
                   '--remote-webserver=0.0.0.0'
+            if not testpath:
+                print 'Leave empty to use TEST_PATH (%s)' % testpath
             mochipath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o000',
                            '--file-mode-mask', '0o100')
+            if not mochipath and testpath:
+                mochipath = testpath
             mochienv, mochipath, mochiargs = self.parseCommand(mochipath,
                 self.mochi_env if hasattr(self, 'mochi_env')
                     and self.mochi_env else None,
