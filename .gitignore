@@ -5,3 +5,6 @@
 # ignore INSTALL instruction
 /INSTALL
 
+# ignore update marker
+/.update
+

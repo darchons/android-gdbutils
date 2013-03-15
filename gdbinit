@@ -5,13 +5,20 @@
 
 # Load python utilities
 python import adbparams
-python import feninit, tracebt, fastload, adblog
+python import feninit, tracebt, fastload, adblog, updater
 
 
-# Uncomment to change feninit behavior
+# To set preferences, look for lines starting with 'set' or 'python'
+# Copy these lines to gdbinit.local and uncomment them to enable the settings
+
 
 #set adb-path /PATH/TO/SDK/platform-tools/adb
 #set adb-device DEVICE-SERIAL
+
+# set updater.default.update_interval to the interval in days
+#   between checking for new updates; set to 0 to disable updates
+
+# python updater.default.update_interval = 0
 
 # feninit.default.objdir will be used as object directory if specified
 # otherwise, feninit.default.srcroot will be scanned for directories
@@ -112,6 +119,17 @@ define dump-pseudo-stack
     call mozilla_sampler_print_location()
 end
 
+
+# load local configuration
+python
+import gdb, os
+localconfig = os.path.join(gdb.PYTHONDIR, os.path.pardir, 'gdbinit.local')
+if os.path.isfile(localconfig):
+    gdb.execute('source ' + localconfig)
+end
+
+
+update-gdbutils
 feninit
 fastload quick
 

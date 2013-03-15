@@ -42,14 +42,14 @@ class FenInit(gdb.Command):
                 print '\n********'
                 print '* Pro-tip: you seem to be forwarding ADB through SSH'
                 if not gdbserver_set:
-                    print '* configure gdbserver_port in gdbinit to set the ' \
+                    print '* configure gdbserver_port in gdbinit.local to set the ' \
                           'forwarding port for gdb debugging'
                 if not jdwp_set:
-                    print '* configure jdwp_port in gdbinit to set the ' \
+                    print '* configure jdwp_port in gdbinit.local to set the ' \
                           'forwarding port for jdb debugging'
                 print '********'
         print '\nFennec GDB utilities'
-        print ' (edit utils/gdbinit file to change preferences)'
+        print '  (see utils/gdbinit and utils/gdbinit.local on how to configure settings)'
         for i in range(len(self.TASKS)):
             print '%d. %s' % (i + 1, self.TASKS[i])
         task = 0
