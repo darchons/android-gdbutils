@@ -74,43 +74,48 @@ class FenInit(gdb.Command):
         print 'Using device %s' % dev
         self.device = dev
 
+    def _isObjDir(self, abspath):
+        return os.path.isdir(abspath) and \
+            os.path.isfile(os.path.join(abspath, 'Makefile')) and \
+            os.path.isdir(os.path.join(abspath, 'dist'))
+
     def _chooseObjdir(self):
         def scanSrcDir(objdirs, path):
             # look for 'obj*' directories, using 'dist' as a clue
-            abspath = os.path.abspath(os.path.expanduser(path))
-            if not os.path.isdir(abspath):
+            abspath = os.path.abspath(path)
+            if abspath in objdirs or not os.path.isdir(abspath):
                 return
-            if os.path.isdir(os.path.join(abspath, 'dist')):
-                objdirs.append(abspath)
+            if self._isObjDir(abspath):
+                objdirs.insert(0, abspath)
                 return
             for d in os.listdir(abspath):
                 if not d.startswith('obj'):
                     continue
                 objdir = os.path.join(abspath, d)
-                if os.path.isdir(objdir) and \
-                        os.path.isdir(os.path.join(objdir, 'dist')):
-                    objdirs.append(objdir)
+                if objdir in objdirs:
+                    continue
+                if self._isObjDir(objdir):
+                    objdirs.insert(0, objdir)
 
         objdir = '' # None means don't use an objdir
         objdirs = []
         # look for possible locations
-        srcroot = self.srcroot if hasattr(self, 'srcroot') else '~'
-        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-central'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'central'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-aurora'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'aurora'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-beta'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'beta'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'mozilla-release'))
-        scanSrcDir(objdirs, os.path.join(srcroot, 'release'))
+        srcroot = os.path.expanduser(os.path.expandvars(
+            self.srcroot if hasattr(self, 'srcroot') else '~'))
+        for d in os.listdir(srcroot):
+            scanSrcDir(objdirs, os.path.join(srcroot, d))
         objdirs.sort()
 
         # use saved setting if possible; also allows gdbinit to set objdir
         if hasattr(self, 'objdir'):
-            objdir = self.objdir
-            if objdir:
+            if self.objdir:
+                objdir = os.path.abspath(os.path.expanduser(
+                        os.path.expandvars(self.objdir)))
                 scanSrcDir(objdirs, objdir)
+                if not any((s.startswith(objdir) for s in objdirs)):
+                    print 'Preset object directory (%s) is invalid' % objdir
             else:
+                # self.objdir specifically set to not use objdir
                 objdir = None
                 objdirs.append(objdir)
         # let user choose even if only one objdir found,
