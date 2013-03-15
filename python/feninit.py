@@ -200,6 +200,85 @@ class FenInit(gdb.Command):
                 os.pathsep.join(searchPaths), False, True)
         print 'Updated solib-search-path.'
 
+    def _verifyPackage(self, objdir, pkg):
+        if not objdir or not pkg:
+            return True
+        apks = []
+        distdir = os.path.join(objdir, 'dist')
+        for f in os.listdir(distdir):
+            if f.lower().endswith('.apk'):
+                apks.append(os.path.join(distdir, f))
+        if not apks:
+            return True
+        apks.sort(key=lambda f: os.path.getmtime(f))
+        apk = apks[-1]
+
+        while True:
+            devapk = None
+            devpkgs = adb.call(['shell', 'pm', 'list', 'packages', '-f', pkg])
+            for devpkg in (l.strip() for l in devpkgs.splitlines()):
+                if not devpkg:
+                    continue
+                # devpkg has the format 'package:/data/app/pkg.apk=pkg'
+                devpkg = devpkg.partition('=')
+                if pkg != devpkg[2]:
+                    continue
+                devapk = devpkg[0].partition(':')[2]
+
+            if devapk:
+                devapkls = adb.call(['shell', 'ls', '-l', devapk])
+                devapksize = [int(f, 0) for f in devapkls.split()
+                        if f.isdigit() and int(f, 0) > 1024 * 1024]
+                if not devapksize:
+                    return True
+                if devapksize[0] == os.path.getsize(apk):
+                    return True
+
+            if devapk:
+                print 'Package %s does not seem to match file %s.' % \
+                        (pkg, os.path.basename(apk))
+            else:
+                print 'Package %s does not seem to exist.' % pkg
+            ans = None
+            while not ans or (ans[0] != 'y' and ans[0] != 'Y' and
+                              ans[0] != 'n' and ans[0] != 'N'):
+                ans = readinput.call('Reinstall apk? [yes/no]: ',
+                        '-l', str(['yes', 'no']))
+            print
+            if ans[0] == 'n' or ans[0] == 'N':
+                return False
+            sys.stdout.write('adb install -r... ')
+            sys.stdout.flush()
+            adbout = adb.call(['install', '-r', apk],
+                    stderr=subprocess.PIPE).splitlines()
+            adbout = [f for f in adbout if f.strip()]
+            if not adbout:
+                adbout = ['No output?!']
+            print adbout[-1]
+            if 'success' in adbout[-1].lower():
+                continue
+
+            ans = None
+            while not ans or (ans[0] != 'y' and ans[0] != 'Y' and
+                              ans[0] != 'n' and ans[0] != 'N'):
+                ans = readinput.call('Uninstall then install? [yes/no]: ',
+                        '-l', str(['yes', 'no']))
+            print
+            if ans[0] == 'n' or ans[0] == 'N':
+                return False
+            sys.stdout.write('adb uninstall...')
+            sys.stdout.flush()
+            adb.call(['uninstall', pkg],
+                    stderr=subprocess.PIPE)
+            sys.stdout.write('\nadb install... ');
+            sys.stdout.flush()
+            adbout = adb.call(['install', '-r', apk],
+                    stderr=subprocess.PIPE).splitlines()
+            adbout = [f for f in adbout if f.strip()]
+            if not adbout:
+                adbout = ['No output?!']
+            print adbout[-1]
+
     def _getPackageName(self, objdir):
         if objdir:
             acname = os.path.join(objdir, 'config', 'autoconf.mk')
@@ -961,6 +1040,7 @@ class FenInit(gdb.Command):
             datadir = str(gdb.parameter('data-directory'))
             objdir = self.objdir
             pkg = self._getPackageName(objdir)
+            self._verifyPackage(objdir, pkg)
             if (self._task == self.TASK_FENNEC or
                 self._task == self.TASK_FENNEC_ENV or
                 self._task == self.TASK_JAVA):
