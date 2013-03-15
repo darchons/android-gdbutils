@@ -358,35 +358,32 @@ class FenInit(gdb.Command):
         return (self.quoteEnv(env), args)
 
     def _launch(self, pkg):
-        # name of child binary
-        CHILD_EXECUTABLE = 'plugin-container'
-
-        # get parent/child processes
-        pkgProcs = self._getRunningProcs(pkg)
-
         sys.stdout.write('Launching %s... ' % pkg)
         sys.stdout.flush()
-        if all([CHILD_EXECUTABLE in x for x in pkgProcs]):
-            # launch
-            args = ['shell', 'am', 'start', '-n', pkg + '/.App']
-            if hasattr(self, '_env') and self._env:
-                envcount = 0
-                for envvar in self._env:
-                    args += ['--es', 'env' + str(envcount), envvar]
-                    envcount += 1
-            if hasattr(self, '_args') and self._args:
-                if not self._args[0].startswith('-'):
-                    # assume data URI
-                    args += ['-d', self._args.pop(0)]
-                args += ['--es', 'args', ' '.join(
-                    [pipes.quote(s) for s in self._args])]
-            out = adb.call(args)
-            if 'error' in out.lower():
-                print ''
-                print out
-                raise gdb.GdbError('Error while launching %s.' % pkg)
-            # sleep for 1s to allow time to launch
-            time.sleep(1)
+        # always launch in case the activity is not in foreground
+        args = ['shell', 'am', 'start', '-n', pkg + '/.App', '-W']
+        kill = False
+        if hasattr(self, '_env') and self._env:
+            envcount = 0
+            for envvar in self._env:
+                args += ['--es', 'env' + str(envcount), envvar]
+                envcount += 1
+            kill = True
+        if hasattr(self, '_args') and self._args:
+            if not self._args[0].startswith('-'):
+                # assume data URI
+                args += ['-d', self._args.pop(0)]
+            args += ['--es', 'args', ' '.join(
+                [pipes.quote(s) for s in self._args])]
+            kill = True
+        if kill:
+            # kill first if we have any env vars or args
+            self._killRunningProcs(pkg)
+        out = adb.call(args)
+        if 'error' in out.lower():
+            print ''
+            print out
+            raise gdb.GdbError('Error while launching %s.' % pkg)
 
     def _linkJavaSources(self, srcdir, objdir):
         # top dir of symbolic links
