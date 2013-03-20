@@ -708,7 +708,7 @@ class FenInit(gdb.Command):
                 print '    path can be relative to $objdir/dist/bin or absolute'
             print '    environmental variables and arguments are supported'
             print '    e.g. FOO=bar TestFooBar arg1 arg2'
-            if not testpath:
+            if testpath:
                 print 'Leave empty to use TEST_PATH (%s)' % testpath
             cpppath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o100',
