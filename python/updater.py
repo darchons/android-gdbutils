@@ -63,6 +63,8 @@ class Updater(gdb.Command):
 
         interval = (self.update_interval
                 if hasattr(self, 'update_interval') else 90)
+        if argument and argument.strip() == 'force':
+            interval = -1
         if not interval:
             return
 
@@ -77,13 +79,13 @@ class Updater(gdb.Command):
             with open(marker, 'a'):
                 os.utime(marker, None)
 
-        if not os.path.isfile(marker):
+        if interval > 0 and not os.path.isfile(marker):
             touchUpdate()
             return
 
         elapsed = time.time() - os.path.getmtime(marker)
         if elapsed >= interval * 24 * 60 * 60:
-            ans = ''
+            ans = '' if interval > 0 else 'y'
             while not ans or (ans[0] != 'y' and ans[0] != 'Y' and
                               ans[0] != 'n' and ans[0] != 'N'):
                 print
