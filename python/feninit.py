@@ -206,7 +206,7 @@ class FenInit(gdb.Command):
         apks = []
         distdir = os.path.join(objdir, 'dist')
         for f in os.listdir(distdir):
-            if f.lower().endswith('.apk'):
+            if f.lower().startswith('fennec-') and f.lower().endswith('.apk'):
                 apks.append(os.path.join(distdir, f))
         if not apks:
             return True
