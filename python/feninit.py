@@ -203,10 +203,11 @@ class FenInit(gdb.Command):
     def _verifyPackage(self, objdir, pkg):
         if not objdir or not pkg:
             return True
+        apkprefix = self._getAppName(objdir) + '-'
         apks = []
         distdir = os.path.join(objdir, 'dist')
         for f in os.listdir(distdir):
-            if f.lower().startswith('fennec-') and f.lower().endswith('.apk'):
+            if f.lower().startswith(apkprefix) and f.lower().endswith('.apk'):
                 apks.append(os.path.join(distdir, f))
         if not apks:
             return True
@@ -278,6 +279,18 @@ class FenInit(gdb.Command):
             if not adbout:
                 adbout = ['No output?!']
             print adbout[-1]
+
+    def _getAppName(self, objdir):
+        try:
+            with open(os.path.join(objdir, 'config', 'autoconf.mk')) as acfile:
+                for line in acfile:
+                    line = line.partition('=')
+                    if line[0].strip() != 'MOZ_APP_NAME' or not line[2]:
+                        continue
+                    return line[2].strip()
+        except IOError:
+            pass
+        return 'fennec'
 
     def _getPackageName(self, objdir):
         if objdir:
