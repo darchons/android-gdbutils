@@ -835,7 +835,7 @@ class FenInit(gdb.Command):
                   'test harness arguments are supported'
             print '    e.g. NSPR_LOG_MODULES=all:5 test_foo_bar.html ' \
                   '--remote-webserver=0.0.0.0'
-            if not testpath:
+            if testpath:
                 print 'Leave empty to use TEST_PATH (%s)' % testpath
             mochipath = readinput.call(': ', '-f', '-c', rootdir,
                            '--file-mode', '0o000',
