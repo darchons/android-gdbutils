@@ -203,6 +203,9 @@ class FenInit(gdb.Command):
     def _verifyPackage(self, objdir, pkg):
         if not objdir or not pkg:
             return True
+        # get base package name without any webapp part
+        pkg = pkg.partition(':')[0]
+
         apkprefix = self._getAppName(objdir) + '-'
         apks = []
         distdir = os.path.join(objdir, 'dist')
@@ -292,7 +295,11 @@ class FenInit(gdb.Command):
             pass
         return 'fennec'
 
-    def _getPackageName(self, objdir):
+    def _isWebAppPackage(self, pkg):
+        return ':' in pkg and '.WebApp' in pkg
+
+    def _getPackageName(self, objdir, webapps=False):
+        pkgs = None
         if objdir:
             acname = os.path.join(objdir, 'config', 'autoconf.mk')
             try:
@@ -300,16 +307,23 @@ class FenInit(gdb.Command):
                 for line in acfile:
                     if 'ANDROID_PACKAGE_NAME' not in line:
                         continue
-                    acfile.close()
-                    pkg = line.partition('=')[2].strip()
-                    print 'Using package %s.' % pkg
-                    return pkg
+                    pkgs = [line.partition('=')[2].strip()]
+                    if webapps:
+                        webapppkg = ':' + pkgs[0] + '.WebApp'
+                        pkgs.extend([re.split(r'[ \t/]', p.strip())[-1]
+                            for p in self._getRunningProcs(None)
+                            if webapppkg in p])
+                    if len(pkgs) < 2:
+                        acfile.close()
+                        print 'Using package %s.' % pkgs[0]
+                        return pkgs[0]
                 acfile.close()
             except IOError:
                 pass
-        pkgs = [x.partition(':')[-1] for x in \
-            adb.call(['shell', 'pm', 'list', 'packages']).splitlines() \
-            if ':org.mozilla.' in x]
+        if not pkgs:
+            pkgs = [x.partition(':')[-1] for x in \
+                adb.call(['shell', 'pm', 'list', 'packages']).splitlines() \
+                if ':org.mozilla.' in x]
         if pkgs:
             print 'Found package names:'
             for pkg in pkgs:
@@ -326,7 +340,8 @@ class FenInit(gdb.Command):
 
     def _getRunningProcs(self, pkg, waiting=False):
         ps = adb.call(['shell', 'ps']).splitlines()
-        return [x for x in ps if pkg in re.split(r'[ \t/]', x) and
+        return [x for x in ps if
+                (not pkg or pkg in re.split(r'[ \t/]', x)) and
                 (not waiting or 'S' in x.split() or 'T' in x.split())]
 
     def _killRunningProcs(self, pkg):
@@ -575,6 +590,9 @@ class FenInit(gdb.Command):
 
     def _attachGDBServer(self, pkg, filePath, args,
                          skipShell = False, redirectOut = False):
+        # get base package name without any webapp part
+        pkg = pkg.partition(':')[0]
+
         # always push gdbserver in case there's an old version on the device
         gdbserverPath = '/data/local/tmp/gdbserver'
         adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
@@ -1049,7 +1067,8 @@ class FenInit(gdb.Command):
             
             datadir = str(gdb.parameter('data-directory'))
             objdir = self.objdir
-            pkg = self._getPackageName(objdir)
+            pkg = self._getPackageName(objdir,
+                webapps=(self._task in (self.TASK_FENNEC, self.TASK_JAVA)))
             self._verifyPackage(objdir, pkg)
             if (self._task == self.TASK_FENNEC or
                 self._task == self.TASK_FENNEC_ENV or
@@ -1059,8 +1078,11 @@ class FenInit(gdb.Command):
                 else:
                     self._env, self._args = [], []
                 no_launch = hasattr(self, 'no_launch') and self.no_launch
-                if not no_launch:
+                if not no_launch and not self._isWebAppPackage(pkg):
                     self._launch(pkg)
+                else:
+                    sys.stdout.write('Attaching to %s... ' % pkg)
+                    sys.stdout.flush()
                 self._attach(pkg, self._task == self.TASK_JAVA)
             elif self._task == self.TASK_MOCHITEST:
                 xredir = self._getXREDir(datadir)
