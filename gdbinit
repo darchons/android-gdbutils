@@ -120,6 +120,9 @@ define dump-pseudo-stack
 end
 
 
+# get better error messages
+set python print-stack full
+
 # load local configuration
 python
 import gdb, os
