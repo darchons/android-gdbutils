@@ -220,6 +220,8 @@ class FenInit(gdb.Command):
         while True:
             devapk = None
             devpkgs = adb.call(['shell', 'pm', 'list', 'packages', '-f', pkg])
+            if not devpkgs.strip():
+                return True
             for devpkg in (l.strip() for l in devpkgs.splitlines()):
                 if not devpkg:
                     continue
