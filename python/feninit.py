@@ -303,13 +303,15 @@ class FenInit(gdb.Command):
     def _getPackageName(self, objdir, webapps=False):
         pkgs = None
         if objdir:
+            appname = self._getAppName(objdir)
             acname = os.path.join(objdir, 'config', 'autoconf.mk')
             try:
                 acfile = open(acname)
                 for line in acfile:
                     if 'ANDROID_PACKAGE_NAME' not in line:
                         continue
-                    pkgs = [line.partition('=')[2].strip()]
+                    pkgs = [line.partition('=')[2].strip()
+                                .replace('$(MOZ_APP_NAME)', appname)]
                     if webapps:
                         webapppkg = ':' + pkgs[0] + '.WebApp'
                         pkgs.extend([re.split(r'[ \t/]', p.strip())[-1]
