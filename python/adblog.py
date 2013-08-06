@@ -29,7 +29,7 @@ def _getColorFn(color):
         return PRIORITY_MAP[entry.priority] \
                 if entry.priority in PRIORITY_MAP else 5
     def threadColorFn(entry):
-        return int(entry.tid, 0) % 5 + 2
+        return (int(entry.tid, 0) % 5 + 2) if entry.tid else 5
     return priorityColorFn if color == 'priority' else \
             threadColorFn if color == 'thread' else orderColorFn
 
@@ -101,8 +101,12 @@ class ADBLog(threading.Thread):
                 text.append(line)
             wholeLog = ' '.join(items).lower() + ',' + ' '.join(text).lower()
 
-        pidtid = items[2].partition(':')
-        priotag = items[3].partition('/')
+        if len(items) < 4:
+            pidtid = items[2].partition(':')
+            priotag = items[3].partition('/')
+        else:
+            pidtid = [items[2].strip(':'), None, items[3]]
+            priotag = items[4].partition('/')
         return ADBLogEntry(items[0], items[1],
                 pidtid[0], pidtid[2],
                 priotag[0], priotag[2], '\\\\'.join(text));
