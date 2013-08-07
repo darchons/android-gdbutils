@@ -101,7 +101,7 @@ class ADBLog(threading.Thread):
                 text.append(line)
             wholeLog = ' '.join(items).lower() + ',' + ' '.join(text).lower()
 
-        if len(items) < 4:
+        if len(items) < 5:
             pidtid = items[2].partition(':')
             priotag = items[3].partition('/')
         else:
