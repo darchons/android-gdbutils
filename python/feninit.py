@@ -200,6 +200,79 @@ class FenInit(gdb.Command):
                 os.pathsep.join(searchPaths), False, True)
         print 'Updated solib-search-path.'
 
+    def _extractApk(self, pkg, bindir, libdir):
+        sys.stdout.write('Pulling apk for symbols... ')
+        sys.stdout.flush()
+        apk = self._getPackageApk(pkg)
+        if not apk:
+            print 'Could not find apk.'
+            return
+
+        def findSzip(path):
+            try:
+                with open(os.devnull, 'w') as devnull:
+                    subprocess.call(path, stdout=devnull, stderr=devnull)
+                return path
+            except OSError:
+                pass
+            return None
+        szip = findSzip(os.path.join(bindir, 'szip')) or \
+               findSzip('szip')
+        if not szip:
+            print '*** Could not find szip tool ***'
+            return
+
+        import zipfile
+        appdir = os.path.join(libdir, 'app', pkg)
+        if os.path.isdir(appdir):
+            shutil.rmtree(appdir, ignore_errors=True)
+        apppath = os.path.join(appdir, 'app.apk')
+        adb.pull(apk, apppath)
+        print 'Done'
+
+        sys.stdout.write('Extracting apk... ')
+        sys.stdout.flush()
+        apkzip = zipfile.ZipFile(apppath, 'r')
+        try:
+            if any(not os.path.realpath(os.path.join(appdir, f)).startswith(
+                   os.path.realpath(appdir))
+                   for f in apkzip.namelist()):
+                # extracted file will be outside of the destination directory
+                raise gdb.GdbError('Invalid apk file')
+            apkzip.extractall(appdir)
+        finally:
+            apkzip.close()
+        print 'Done'
+
+        sys.stdout.write('Un-szipping solibs... ')
+        sys.stdout.flush()
+        dirs = [gdb.parameter('solib-search-path')]
+        with open(os.devnull, 'w') as devnull:
+            for root, dirnames, filenames in os.walk(appdir):
+                for sofile in (fn for fn in filenames if fn.endswith('.so')):
+                    subprocess.check_call([szip, '-d', os.path.join(root, sofile)],
+                        stdout=devnull, stderr=devnull)
+                    if root not in dirs:
+                        dirs.append(root)
+        print 'Done'
+
+        gdb.execute('set solib-search-path ' + os.pathsep.join(dirs), False, True)
+        print 'Updated solib-search-path'
+
+    def _getPackageApk(self, pkg):
+        devpkgs = adb.call(['shell', 'pm', 'list', 'packages', '-f'])
+        if not devpkgs.strip():
+            return None
+        for devpkg in (l.strip() for l in devpkgs.splitlines()):
+            if not devpkg:
+                continue
+            # devpkg has the format 'package:/data/app/pkg.apk=pkg'
+            devpkg = devpkg.partition('=')
+            if pkg != devpkg[2]:
+                continue
+            return devpkg[0].partition(':')[2]
+        return ''
+
     def _verifyPackage(self, objdir, pkg):
         if not objdir or not pkg:
             return True
@@ -218,18 +291,10 @@ class FenInit(gdb.Command):
         apk = apks[-1]
 
         while True:
-            devapk = None
-            devpkgs = adb.call(['shell', 'pm', 'list', 'packages', '-f', pkg])
-            if not devpkgs.strip():
+            devapk = self._getPackageApk(pkg)
+
+            if devapk is None:
                 return True
-            for devpkg in (l.strip() for l in devpkgs.splitlines()):
-                if not devpkg:
-                    continue
-                # devpkg has the format 'package:/data/app/pkg.apk=pkg'
-                devpkg = devpkg.partition('=')
-                if pkg != devpkg[2]:
-                    continue
-                devapk = devpkg[0].partition(':')[2]
 
             if devapk:
                 devapkls = adb.call(['shell', 'ls', '-l', devapk])
@@ -1074,6 +1139,11 @@ class FenInit(gdb.Command):
             pkg = self._getPackageName(objdir,
                 webapps=(self._task in (self.TASK_FENNEC, self.TASK_JAVA)))
             self._verifyPackage(objdir, pkg)
+
+            if not objdir and pkg:
+                # extract apk to get symbols
+                self._extractApk(pkg, self.bindir, self.libdir)
+
             if (self._task == self.TASK_FENNEC or
                 self._task == self.TASK_FENNEC_ENV or
                 self._task == self.TASK_JAVA):
