@@ -684,6 +684,8 @@ class FenInit(gdb.Command):
                 line = proc.stdout.readline()
                 words = line.split()
                 out.append(line.rstrip())
+                if 'gdbserver terminated by' in line:
+                    break
                 # kind of hacky, assume the port number comes after 'port'
                 if 'port' not in words:
                     continue
@@ -692,13 +694,14 @@ class FenInit(gdb.Command):
                 port = words[words.index('port') + 1]
                 if not port.isdigit():
                     continue
-                return (proc, port, None)
+                return (proc, port, out)
             # not found, error?
             return (None, None, out)
 
         # can we run as root?
         gdbserverProc = None
         gdbserverRootOut = ''
+        intentPid = None
         if not skipShell:
             gdbserverArgs = ['shell', gdbserverPath]
             gdbserverArgs.extend(args)
@@ -721,6 +724,18 @@ class FenInit(gdb.Command):
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
                     ['shell', 'su', '-c', gdbserverPath + '.run'])
         if not gdbserverProc:
+            sys.stdout.write('using intent... ')
+            sys.stdout.flush()
+            self._killRunningProcs(pkg)
+            adb.call(['logcat', '-c'])
+            adb.call(['shell', 'am', 'start', '-W', '-n', pkg + '/.App',
+                      '-a', 'org.mozilla.gecko.DEBUG',
+                      '--es', 'gdbserver', ' '.join(args)])
+            (gdbserverProc, port, gdbserverAmOut) = runGDBServer(
+                    ['logcat', '-s', '-v', 'process', 'gdbserver:V'])
+            if gdbserverAmOut:
+                intentPid = gdbserverAmOut[0][2:7]
+        if not gdbserverProc:
             print ''
             if gdbserverRootOut:
                 print '"gdbserver" output:'
@@ -732,6 +747,9 @@ class FenInit(gdb.Command):
             print '"su -c" output:'
             print ' ' + '\n '.join([s for s in gdbserverSuOut
                                     if s]).replace('\0', '')
+            print '"am start" output:'
+            print ' ' + '\n '.join([s for s in gdbserverAmOut
+                                    if s]).replace('\0', '')
             raise gdb.GdbError('failed to run gdbserver')
 
         self.port = port
@@ -740,12 +758,16 @@ class FenInit(gdb.Command):
         # collect output from gdbserver in another thread
         def makeGdbserverWait(obj, proc):
             def gdbserverWait():
-                if not redirectOut:
+                if not intentPid and not redirectOut:
                     obj.gdbserverOut = proc.communicate()
                     return
                 while proc.poll() == None:
                     line = proc.stdout.readline()
                     if not line:
+                        break
+                    if intentPid and intentPid in line and \
+                            'gdbserver terminated by' in line:
+                        proc.terminate()
                         break
                     if adblog.continuing:
                         sys.__stderr__.write('\x1B[1mout> \x1B[22m' + line)
