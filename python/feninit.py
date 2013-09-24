@@ -459,24 +459,26 @@ class FenInit(gdb.Command):
         sys.stdout.flush()
         # always launch in case the activity is not in foreground
         args = ['shell', 'am', 'start', '-n', pkg + '/.App', '-W']
+        extraArgs = []
         kill = False
         if hasattr(self, '_env') and self._env:
             envcount = 0
             for envvar in self._env:
-                args += ['--es', 'env' + str(envcount), envvar]
+                extraArgs += ['--es', 'env' + str(envcount), envvar]
                 envcount += 1
             kill = True
         if hasattr(self, '_args') and self._args:
             if not self._args[0].startswith('-'):
                 # assume data URI
-                args += ['-d', self._args.pop(0)]
-            args += ['--es', 'args', ' '.join(
+                extraArgs += ['-d', self._args.pop(0)]
+            extraArgs += ['--es', 'args', ' '.join(
                 [pipes.quote(s) for s in self._args])]
             kill = True
         if kill:
             # kill first if we have any env vars or args
             self._killRunningProcs(pkg)
-        out = adb.call(args)
+        out = adb.call(args + extraArgs)
+        self.amExtraArgs = extraArgs
         if 'error' in out.lower():
             print ''
             print out
@@ -730,7 +732,8 @@ class FenInit(gdb.Command):
             adb.call(['logcat', '-c'])
             adb.call(['shell', 'am', 'start', '-W', '-n', pkg + '/.App',
                       '-a', 'org.mozilla.gecko.DEBUG',
-                      '--es', 'gdbserver', ' '.join(args)])
+                      '--es', 'gdbserver', ' '.join(args)] +
+                      getattr(self, 'amExtraArgs', []))
             (gdbserverProc, port, gdbserverAmOut) = runGDBServer(
                     ['logcat', '-s', '-v', 'process', 'gdbserver:V'])
             if gdbserverAmOut:
