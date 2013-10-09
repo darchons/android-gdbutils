@@ -753,6 +753,12 @@ class FenInit(gdb.Command):
             print '"am start" output:'
             print ' ' + '\n '.join([s for s in gdbserverAmOut
                                     if s]).replace('\0', '')
+            if any('not executable: magic' in s for s in gdbserverRootOut):
+                print '\n********'
+                print '* Your device platform is not supported by this GDB'
+                print '* Use jimdb-x86 for x86 targets/devices'
+                print '* Use jimdb-arm for ARM targets/devices'
+                print '********\n'
             raise gdb.GdbError('failed to run gdbserver')
 
         self.port = port
