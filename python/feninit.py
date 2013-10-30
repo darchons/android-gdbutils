@@ -677,6 +677,13 @@ class FenInit(gdb.Command):
         def runGDBServer(args): # returns (proc, port, stdout)
             proc = adb.call(args, stderr=subprocess.PIPE, async=True,
                     preexec_fn=gdbserverPreExec)
+            need_watchdog = True
+            def watchdog():
+                time.sleep(10)
+                if need_watchdog and proc.poll() is None: # still running
+                    proc.terminate()
+            (threading.Thread(target=watchdog)).start()
+
             # we have to find the port used by gdbserver from stdout
             # while this complicates things a little, it allows us to
             # have multiple gdbservers running
@@ -696,8 +703,10 @@ class FenInit(gdb.Command):
                 port = words[words.index('port') + 1]
                 if not port.isdigit():
                     continue
+                need_watchdog = False
                 return (proc, port, out)
             # not found, error?
+            need_watchdog = False
             return (None, None, out)
 
         # can we run as root?
