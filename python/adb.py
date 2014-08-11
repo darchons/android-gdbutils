@@ -30,7 +30,8 @@ def call(args, **kw):
     except OSError as e:
         raise gdb.GdbError('cannot run adb: ' + str(e))
     if adb.returncode != 0:
-        raise gdb.GdbError('adb returned exit code ' + str(adb.returncode))
+        raise gdb.GdbError('adb returned exit code ' + str(adb.returncode) +
+                           ' for arguments ' + str(args))
     return out
 
 def getDevices():
