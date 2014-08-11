@@ -1119,7 +1119,7 @@ class FenInit(gdb.Command):
             os.setpgrp()
         proc = subprocess.Popen(exe, stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE,
+                                stderr=subprocess.STDOUT,
                                 preexec_fn=exePreExec, env=env)
 
         line = proc.stdout.readline()
