@@ -1070,7 +1070,8 @@ class FenInit(gdb.Command):
             env['MOZ_HOST_BIN'] = xredir
             if not topsrcdir:
                 topsrcdir = os.path.join(objdir, os.path.pardir)
-            env['TEST_PATH'] = os.path.relpath(test, topsrcdir)
+            if test:
+                env['TEST_PATH'] = os.path.relpath(test, topsrcdir)
             testargs = ['--setenv=' + s for s in self.quoteEnv(sutenv)]
             testargs.extend([pipes.quote(s) for s in args])
             env['EXTRA_TEST_ARGS'] = ' '.join(testargs)
@@ -1103,8 +1104,8 @@ class FenInit(gdb.Command):
             exe = [sys.executable, os.path.join(harness, script),
                    '--autorun', '--close-when-done', '--deviceIP=',
                    '--console-level=INFO', '--file-level=INFO',
-                   '--dm_trans=adb', '--app=' + pkg, '--xre-path=' + xredir,
-                   '--test-path=' + os.path.relpath(test, topsrcdir)]
+                   '--dm_trans=adb', '--app=' + pkg, '--xre-path=' + xredir] + \
+                 (['--test-path=' + os.path.relpath(test, topsrcdir)] if test else [])
             exe.extend(['--setenv=' + s for s in sutenv])
             exe.extend(args)
 
