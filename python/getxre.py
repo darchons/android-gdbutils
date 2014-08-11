@@ -16,6 +16,7 @@ if __name__ == '__main__': # not module
     (args, extras) = parser.parse_args()
 
     if not hasattr(args, 'd') or not args.d:
+        print 'missing required argument -d, the dst directory'
         exit(1)
     xredir = args.d
     if not os.path.isdir(xredir):
@@ -119,7 +120,12 @@ if __name__ == '__main__': # not module
         testzip.close()
     os.remove(testdst)
     print 'Done'
-    os.chmod(os.path.join(xredir, 'bin', 'xpcshell'), 0o755)
+    for binary_name in ['certutil', 'pk12util', 'xpcshell', 'ssltunnel']:
+        binary_path = os.path.join(xredir, 'bin', binary_name)
+        if os.path.isfile(binary_path):
+            os.chmod(binary_path, 0o755)
+        else:
+            raise Exception('Cannot find required binary %s' % (binary_path))
     print 'Downloaded XRE to ' + xredir
 
 else:
