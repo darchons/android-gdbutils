@@ -367,7 +367,7 @@ class FenInit(gdb.Command):
         return 'fennec'
 
     def _isWebAppPackage(self, pkg):
-        return ':' in pkg and '.WebApp' in pkg
+        return ':' in pkg and ('.WebApp' in pkg or '.Webapp' in pkg)
 
     def _getPackageName(self, objdir, webapps=False):
         pkgs = None
@@ -383,9 +383,10 @@ class FenInit(gdb.Command):
                                 .replace('$(MOZ_APP_NAME)', appname)]
                     if webapps:
                         webapppkg = ':' + pkgs[0] + '.WebApp'
+                        webapppkg2 = ':' + pkgs[0] + '.Webapp'
                         pkgs.extend([re.split(r'[ \t/]', p.strip())[-1]
                             for p in self._getRunningProcs(None)
-                            if webapppkg in p])
+                            if webapppkg in p or webapppkg2 in p])
                     if len(pkgs) < 2:
                         acfile.close()
                         print 'Using package %s.' % pkgs[0]
