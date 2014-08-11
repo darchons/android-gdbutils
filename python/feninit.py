@@ -200,6 +200,10 @@ class FenInit(gdb.Command):
                 os.pathsep.join(searchPaths), False, True)
         print 'Updated solib-search-path.'
 
+        # Pass background hang monitor signal (assuming SIG36)
+        gdb.execute('handle SIG36 nostop noprint pass', False, True)
+        print 'Ignoring BHM signal.'
+
     def _extractApk(self, pkg, bindir, libdir):
         sys.stdout.write('Pulling apk for symbols... ')
         sys.stdout.flush()
