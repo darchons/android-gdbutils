@@ -685,8 +685,10 @@ class FenInit(gdb.Command):
         pkg = pkg.partition(':')[0]
 
         # always push gdbserver in case there's an old version on the device
-        gdbserverPath = '/data/local/tmp/gdbserver'
-        adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
+        tmpPath = '/data/local/tmp/gdbserver'
+        gdbserverPath = '/data/data/' + pkg + '/files/gdbserver'
+        adb.push(os.path.join(self.bindir, 'gdbserver'), tmpPath)
+        adb.call(['shell', 'run-as', pkg, 'cp', tmpPath, gdbserverPath])
         adb.call(['shell', 'chmod', '755', gdbserverPath])
 
         # run this after fork() and before exec(gdbserver)
