@@ -292,6 +292,8 @@ class FenInit(gdb.Command):
             if f.lower().startswith(apkprefix) and f.lower().endswith('.apk'):
                 apks.append(os.path.join(distdir, f))
         if not apks:
+            print '*** Did not find an APK file in your object  ***'
+            print '*** directory; did you choose the right one? ***'
             return True
         apks.sort(key=lambda f: os.path.getmtime(f))
         apk = apks[-1]
@@ -1201,7 +1203,7 @@ class FenInit(gdb.Command):
             self._chooseDevice()
             self._chooseObjdir()
             self._pullLibsAndSetPaths()
-            
+
             datadir = str(gdb.parameter('data-directory'))
             objdir = self.objdir
             pkg = self._getPackageName(objdir,
