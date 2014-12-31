@@ -14,14 +14,16 @@ class FenInit(gdb.Command):
         'Debug Fennec with env vars and args',
         'Debug using jdb',
         'Debug content Mochitest',
-        'Debug compiled-code unit test'
+        'Debug compiled-code unit test',
+        'Debug Fennec with pid'
     )
     (
         TASK_FENNEC,
         TASK_FENNEC_ENV,
         TASK_JAVA,
         TASK_MOCHITEST,
-        TASK_CPP_TEST
+        TASK_CPP_TEST,
+        TASK_ATTACH_PID,
     ) = tuple(range(len(TASKS)))
 
     def __init__(self):
@@ -664,14 +666,30 @@ class FenInit(gdb.Command):
 
         print '\nReady. Use "continue" to resume execution.'
 
+    def _attachPid(self, pkg, pid):
+        path = os.path.join(self.libdir,
+                'system', 'bin', 'app_process')
+
+        self.pid = pid
+        gdbserver_port = ':' + str(self.gdbserver_port
+                if hasattr(self, 'gdbserver_port') else 0)
+        self._attachGDBServer(
+                pkg,
+                path,
+                ['--once', '--attach', gdbserver_port, pid])
+
+        print '\nReady. Use "continue" to resume execution.'
+
     def _attachGDBServer(self, pkg, filePath, args,
                          skipShell = False, redirectOut = False):
         # get base package name without any webapp part
         pkg = pkg.partition(':')[0]
 
         # always push gdbserver in case there's an old version on the device
-        gdbserverPath = '/data/local/tmp/gdbserver'
-        adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
+        tmpPath = '/data/local/tmp/gdbserver'
+        gdbserverPath = '/data/data/' + pkg + '/files/gdbserver'
+        adb.push(os.path.join(self.bindir, 'gdbserver'), tmpPath)
+        adb.call(['shell', 'run-as', pkg, 'cp', tmpPath, gdbserverPath])
         adb.call(['shell', 'chmod', '755', gdbserverPath])
 
         # run this after fork() and before exec(gdbserver)
@@ -1160,6 +1178,10 @@ class FenInit(gdb.Command):
         outThd.start()
         return proc
 
+    def _choosePid(self):
+        print 'Enter PID'
+        return readinput.call(': ', '-d')
+
     def invoke(self, argument, from_tty):
         try:
             saved_height = gdb.parameter('height')
@@ -1214,6 +1236,9 @@ class FenInit(gdb.Command):
                 self._chooseCpp()
                 self._prepareCpp(pkg)
                 self._attachCpp(pkg)
+            elif self._task == self.TASK_ATTACH_PID:
+                pid = self._choosePid()
+                self._attachPid(pkg, pid)
 
             self.dont_repeat()
         except:
