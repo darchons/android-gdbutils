@@ -688,10 +688,8 @@ class FenInit(gdb.Command):
         pkg = pkg.partition(':')[0]
 
         # always push gdbserver in case there's an old version on the device
-        tmpPath = '/data/local/tmp/gdbserver'
-        gdbserverPath = '/data/data/' + pkg + '/files/gdbserver'
-        adb.push(os.path.join(self.bindir, 'gdbserver'), tmpPath)
-        adb.call(['shell', 'run-as', pkg, 'cp', tmpPath, gdbserverPath])
+        gdbserverPath = '/data/local/tmp/gdbserver'
+        adb.push(os.path.join(self.bindir, 'gdbserver'), gdbserverPath)
         adb.call(['shell', 'chmod', '755', gdbserverPath])
 
         # run this after fork() and before exec(gdbserver)
@@ -742,6 +740,7 @@ class FenInit(gdb.Command):
             gdbserverArgs = ['shell', gdbserverPath]
             gdbserverArgs.extend(args)
             (gdbserverProc, port, gdbserverRootOut) = runGDBServer(gdbserverArgs)
+
         if not gdbserverProc:
             sys.stdout.write('as non-root... ')
             sys.stdout.flush()
@@ -749,6 +748,17 @@ class FenInit(gdb.Command):
             gdbserverArgs.extend(args)
             (gdbserverProc, port, gdbserverRunAsOut) = \
                     runGDBServer(gdbserverArgs)
+
+        if not gdbserverProc:
+            sys.stdout.write('in pkg dir... ')
+            sys.stdout.flush()
+            pkgGdbserverPath = '/data/data/' + pkg + '/files/gdbserver'
+            adb.call(['shell', 'run-as', pkg, 'cp', gdbserverPath, pkgGdbserverPath])
+            adb.call(['shell', 'run-as', pkg, 'chmod', '755', pkgGdbserverPath])
+            gdbserverArgs = ['shell', 'run-as', pkg, pkgGdbserverPath] + args
+            (gdbserverProc, port, gdbserverPkgRunAsOut) = \
+                    runGDBServer(gdbserverArgs)
+
         if not gdbserverProc:
             sys.stdout.write('as root... ')
             sys.stdout.flush()
@@ -758,6 +768,14 @@ class FenInit(gdb.Command):
             adb.call(['shell', 'chmod', '755', gdbserverPath + '.run'])
             (gdbserverProc, port, gdbserverSuOut) = runGDBServer(
                     ['shell', 'su', '-c', gdbserverPath + '.run'])
+
+        if not gdbserverProc:
+            sys.stdout.write('in pkg dir... ')
+            sys.stdout.flush()
+            gdbserverArgs = ['shell', 'su', '-c', pkgGdbserverPath] + args
+            (gdbserverProc, port, gdbserverPkgSuOut) = \
+                    runGDBServer(gdbserverArgs)
+
         if not gdbserverProc:
             sys.stdout.write('using intent... ')
             sys.stdout.flush()
@@ -771,6 +789,7 @@ class FenInit(gdb.Command):
                     ['logcat', '-s', '-v', 'process', 'gdbserver:V'])
             if gdbserverAmOut:
                 intentPid = gdbserverAmOut[0][2:7]
+
         if not gdbserverProc:
             print ''
             if gdbserverRootOut:
@@ -780,13 +799,21 @@ class FenInit(gdb.Command):
             print '"run-as" output:'
             print ' ' + '\n '.join([s for s in gdbserverRunAsOut
                                     if s]).replace('\0', '')
+            print '"run-as pkg" output:'
+            print ' ' + '\n '.join([s for s in gdbserverPkgRunAsOut
+                                    if s]).replace('\0', '')
             print '"su -c" output:'
             print ' ' + '\n '.join([s for s in gdbserverSuOut
+                                    if s]).replace('\0', '')
+            print '"su -c pkg" output:'
+            print ' ' + '\n '.join([s for s in gdbserverPkgSuOut
                                     if s]).replace('\0', '')
             print '"am start" output:'
             print ' ' + '\n '.join([s for s in gdbserverAmOut
                                     if s]).replace('\0', '')
-            if any('not executable: magic' in s for s in gdbserverRootOut):
+            if any('not executable: magic' in s for s in (
+                    gdbserverRootOut + gdbserverRunAsOut + gdbserverPkgRunAsOut
+                    + gdbserverSuOut + gdbserverPkgSuOut + gdbserverAmOut)):
                 print '\n********'
                 print '* Your device platform is not supported by this GDB'
                 print '* Use jimdb-x86 for x86 targets/devices'
