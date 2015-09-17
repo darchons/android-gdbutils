@@ -466,8 +466,10 @@ class FenInit(gdb.Command):
     def _launch(self, pkg):
         sys.stdout.write('Launching %s... ' % pkg)
         sys.stdout.flush()
+        launchclass = self.launchclass if hasattr(self, 'launchclass') else "App"
+
         # always launch in case the activity is not in foreground
-        args = ['shell', 'am', 'start', '-n', pkg + '/.App', '-W']
+        args = ['shell', 'am', 'start', '-n', pkg + '/.' + launchclass, '-W']
         extraArgs = []
         kill = False
         if hasattr(self, '_env') and self._env:
