@@ -44,6 +44,11 @@ python import feninit, tracebt, fastload, adblog, updater
 
 #python feninit.default.jdwp_port = 5040
 
+# set feninit.default.launchclass to the entry point class for
+#   the application to test
+
+#python feninit.default.launchclass = "App"
+
 # set feninit.default.env to set environment variables for
 #   debugging Fennec; only applicable when specifically using the
 #   "Debug Fennec with env vars and args" option
