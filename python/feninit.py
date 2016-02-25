@@ -151,8 +151,21 @@ class FenInit(gdb.Command):
         print 'Using object directory: %s' % str(objdir)
         self.objdir = objdir
 
+    def _pullAppProcess(self):
+        names = ['system/bin/app_process32', 'system/bin/app_process']
+        for name in names:
+            dstpath = os.path.join(self.libdir, name.replace('/', os.sep))
+            if os.path.exists(dstpath):
+                return os.path.basename(name)
+
+            try:
+                adb.pull('/' + name, dstpath)
+                return os.path.basename(name)
+            except: pass
+
+        raise gdb.GdbError('Could not find app process file')
+
     def _pullLibsAndSetPaths(self):
-        DEFAULT_FILE = 'system/bin/app_process'
         # libraries/binaries to pull from device
         DEFAULT_LIBS = ['system/lib/libdl.so', 'system/lib/libc.so',
                 'system/lib/libm.so', 'system/lib/libstdc++.so',
@@ -172,9 +185,8 @@ class FenInit(gdb.Command):
                 os.path.join(datadir, os.pardir, 'bin'))
 
         # always pull the executable file
-        dstpath = os.path.join(libdir, DEFAULT_FILE.replace('/', os.sep))
-        if not os.path.exists(dstpath):
-            adb.pull('/' + DEFAULT_FILE, dstpath)
+        self._appProcessName = self._pullAppProcess()
+        print 'app process name: ' + self._appProcessName
 
         # only pull libs and set paths if automatically loading symbols
         if hasattr(self, 'skipPull') and not self.skipPull:
@@ -466,10 +478,10 @@ class FenInit(gdb.Command):
     def _launch(self, pkg):
         sys.stdout.write('Launching %s... ' % pkg)
         sys.stdout.flush()
-        launchclass = self.launchclass if hasattr(self, 'launchclass') else "App"
+        launchclass = self.launchclass if hasattr(self, 'launchclass') else "org.mozilla.gecko.BrowserApp"
 
         # always launch in case the activity is not in foreground
-        args = ['shell', 'am', 'start', '-n', pkg + '/.' + launchclass, '-W']
+        args = ['shell', 'am', 'start', '-n', pkg + '/' + launchclass, '-W']
         extraArgs = []
         kill = False
         if hasattr(self, '_env') and self._env:
@@ -551,7 +563,7 @@ class FenInit(gdb.Command):
         CHILD_EXECUTABLE = 'plugin-container'
         # 'file' command argument for parent process
         PARENT_FILE_PATH = os.path.join(self.libdir,
-                'system', 'bin', 'app_process')
+                'system', 'bin', self._appProcessName)
         # 'file' command argument for child process
         if self.objdir:
             CHILD_FILE_PATH = os.path.join(self.objdir,
@@ -672,7 +684,7 @@ class FenInit(gdb.Command):
 
     def _attachPid(self, pkg, pid):
         path = os.path.join(self.libdir,
-                'system', 'bin', 'app_process')
+                'system', 'bin', self._appProcessName)
 
         self.pid = pid
         gdbserver_port = ':' + str(self.gdbserver_port
@@ -783,7 +795,7 @@ class FenInit(gdb.Command):
             sys.stdout.flush()
             self._killRunningProcs(pkg)
             adb.call(['logcat', '-c'])
-            adb.call(['shell', 'am', 'start', '-W', '-n', pkg + '/.App',
+            adb.call(['shell', 'am', 'start', '-W', '-n', pkg + '/org.mozilla.gecko.BrowserApp',
                       '-a', 'org.mozilla.gecko.DEBUG',
                       '--es', 'gdbserver', ' '.join(args)] +
                       getattr(self, 'amExtraArgs', []))
@@ -927,7 +939,7 @@ class FenInit(gdb.Command):
             # launch
             sys.stdout.write('Launching %s... ' % pkg)
             sys.stdout.flush()
-        out = adb.call(['shell', 'am', 'start', '-n', pkg + '/.App',
+        out = adb.call(['shell', 'am', 'start', '-n', pkg + '/org.mozilla.gecko.BrowserApp',
                 '--es', 'env0', 'MOZ_LINKER_EXTRACT=1'])
         if 'error' in out.lower():
             print '\n' + out
