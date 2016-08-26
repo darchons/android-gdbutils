@@ -157,6 +157,7 @@ class FenInit(gdb.Command):
             dstpath = os.path.join(self.libdir, name.replace('/', os.sep))
             if os.path.exists(dstpath):
                 return os.path.basename(name)
+            os.makedirs(os.path.dirname(dstpath))
 
             try:
                 adb.pull('/' + name, dstpath)
