@@ -21,6 +21,8 @@ def call(args, **kw):
         kw['stdin'] = subprocess.PIPE
     if 'stdout' not in kw:
         kw['stdout'] = subprocess.PIPE
+    if 'stderr' not in kw:
+        kw['stderr'] = subprocess.STDOUT
     try:
         adb = subprocess.Popen(cmd, **kw)
         if async:

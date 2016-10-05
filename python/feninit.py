@@ -713,7 +713,7 @@ class FenInit(gdb.Command):
             os.setpgrp()
 
         def runGDBServer(args): # returns (proc, port, stdout)
-            proc = adb.call(args, stderr=subprocess.PIPE, async=True,
+            proc = adb.call(args, stderr=subprocess.STDOUT, async=True,
                     preexec_fn=gdbserverPreExec)
             need_watchdog = True
             def watchdog():
