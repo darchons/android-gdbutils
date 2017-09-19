@@ -15,7 +15,8 @@ class FenInit(gdb.Command):
         'Debug using jdb',
         'Debug content Mochitest',
         'Debug compiled-code unit test',
-        'Debug Fennec with pid'
+        'Debug Fennec with pid',
+        'Debug another package'
     )
     (
         TASK_FENNEC,
@@ -24,6 +25,7 @@ class FenInit(gdb.Command):
         TASK_MOCHITEST,
         TASK_CPP_TEST,
         TASK_ATTACH_PID,
+        TASK_ATTACH_PACKAGE,
     ) = tuple(range(len(TASKS)))
 
     def __init__(self):
@@ -713,7 +715,7 @@ class FenInit(gdb.Command):
             os.setpgrp()
 
         def runGDBServer(args): # returns (proc, port, stdout)
-            proc = adb.call(args, stderr=subprocess.PIPE, async=True,
+            proc = adb.call(args, stderr=subprocess.STDOUT, async=True,
                     preexec_fn=gdbserverPreExec)
             need_watchdog = True
             def watchdog():
@@ -1225,6 +1227,9 @@ class FenInit(gdb.Command):
         print 'Enter PID'
         return readinput.call(': ', '-d')
 
+    def _choosePackage(self):
+        return readinput.call('Enter package (e.g., org.mozilla.geckoview_example): ')
+
     def invoke(self, argument, from_tty):
         try:
             saved_height = gdb.parameter('height')
@@ -1282,6 +1287,9 @@ class FenInit(gdb.Command):
             elif self._task == self.TASK_ATTACH_PID:
                 pid = self._choosePid()
                 self._attachPid(pkg, pid)
+            elif self._task == self.TASK_ATTACH_PACKAGE:
+                pkg = self._choosePackage()
+                self._attach(pkg, False)
 
             self.dont_repeat()
         except:

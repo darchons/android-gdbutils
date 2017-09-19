@@ -137,6 +137,11 @@ class FastLoad(gdb.Command):
             def makePullLibs(bucket, fnull):
                 def doPullLibs():
                     for fromto in bucket:
+                        try:
+                            os.makedirs(os.path.dirname(fromto[1]))
+                        except:
+                            pass
+
                         cmd = [self.adbcmd]
                         cmd += ['-s', self.adbdev] if self.adbdev else []
                         cmd += ['pull', fromto[0], fromto[1]]

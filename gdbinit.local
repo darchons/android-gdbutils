@@ -10,3 +10,6 @@
 ##
 
 
+
+python feninit.default.objdir = '/home/snorp/source/objdirs/objdir-android-opt'
+python feninit.default.srcroot = '/home/snorp/source/gecko'
